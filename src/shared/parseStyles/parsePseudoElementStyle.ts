@@ -1,6 +1,5 @@
 // src/shared/parseStyles/parsePseudoElementStyle.ts
 
-import { typographyDict } from '../../client/theme';
 import { abbrMap } from '../constant';
 import { IStyleDefinition } from '../parseStyles.types';
 import {
@@ -53,16 +52,16 @@ export function parsePseudoElementStyle(
       // เดิม: if (realAbbr === 'f') => fontDict
       // ใหม่: if (realAbbr === 'ty') => typographyDict
       if (realAbbr === 'ty') {
-        const dictEntry = typographyDict.dict[val2] as Record<string, string> | undefined;
-        if (!dictEntry) {
-          throw new Error(
-            `[SWD-ERR] Typography key "${val2}" not found in theme.typography(...) for pseudo ${pseudoName}.`
-          );
-        }
-        for (const [cssProp2, cssVal2] of Object.entries(dictEntry)) {
-          result[cssProp2] = convertCSSVariable(cssVal2) + (isImportant ? ' !important' : '');
-        }
-        continue;
+        // const dictEntry = typographyDict.dict[val2] as Record<string, string> | undefined;
+        // if (!dictEntry) {
+        //   throw new Error(
+        //     `[SWD-ERR] Typography key "${val2}" not found in theme.typography(...) for pseudo ${pseudoName}.`
+        //   );
+        // }
+        // for (const [cssProp2, cssVal2] of Object.entries(dictEntry)) {
+        //   result[cssProp2] = convertCSSVariable(cssVal2) + (isImportant ? ' !important' : '');
+        // }
+        // continue;
       }
 
       const cProp = abbrMap[realAbbr as keyof typeof abbrMap];

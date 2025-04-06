@@ -1,6 +1,5 @@
 // src/shared/parseStyles/parseScreenStyle.ts
 
-import { breakpoints, typographyDict } from '../../client/theme';
 import { abbrMap } from '../constant';
 import { IStyleDefinition } from '../parseStyles.types';
 import {
@@ -17,12 +16,12 @@ export function parseScreenStyle(
   const openParenIdx = abbrLine.indexOf('(');
   let inside = abbrLine.slice(openParenIdx + 1, -1).trim();
 
-  if (!(inside.startsWith('min') || inside.startsWith('max'))) {
-    const [bp] = inside.split(', ');
-    if (breakpoints.dict[bp]) {
-      inside = inside.replace(bp, breakpoints.dict[bp]);
-    }
-  }
+  // if (!(inside.startsWith('min') || inside.startsWith('max'))) {
+  //   const [bp] = inside.split(', ');
+  //   if (breakpoints.dict[bp]) {
+  //     inside = inside.replace(bp, breakpoints.dict[bp]);
+  //   }
+  // }
 
   const commaIdx = inside.indexOf(',');
   if (commaIdx === -1) {
@@ -72,13 +71,13 @@ export function parseScreenStyle(
       // เดิม: if (abbr2 === 'f') => fontDict
       // ใหม่: if (abbr2 === 'ty') => typographyDict
       if (abbr2 === 'ty') {
-        const dictEntry = typographyDict.dict[val2] as Record<string, string> | undefined;
-        if (!dictEntry) {
-          throw new Error(`"${val2}" not found in theme.typography(...) (screen).`);
-        }
-        for (const [cssProp2, cssVal2] of Object.entries(dictEntry)) {
-          screenProps[cssProp2] = convertCSSVariable(cssVal2) + (isImportant ? ' !important' : '');
-        }
+        // const dictEntry = typographyDict.dict[val2] as Record<string, string> | undefined;
+        // if (!dictEntry) {
+        //   throw new Error(`"${val2}" not found in theme.typography(...) (screen).`);
+        // }
+        // for (const [cssProp2, cssVal2] of Object.entries(dictEntry)) {
+        //   screenProps[cssProp2] = convertCSSVariable(cssVal2) + (isImportant ? ' !important' : '');
+        // }
       } else {
         const cProp = abbrMap[abbr2 as keyof typeof abbrMap];
         if (!cProp) {

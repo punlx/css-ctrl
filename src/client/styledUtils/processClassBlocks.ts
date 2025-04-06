@@ -45,13 +45,13 @@ export function processClassBlocks(
     // 2) กันซ้ำข้ามไฟล์
     if (scopeName !== 'none') {
       const scopeClassKey = `${scopeName}:${clsName}`;
-      if (process.env.NODE_ENV === 'production') {
-        if (usedScopeClasses.has(scopeClassKey)) {
-          console.warn(
-            `[SWD-ERR] Class ".${clsName}" in scope "${scopeName}" is already used in another file.`
-          );
-        }
-      }
+      // if (process.env.NODE_ENV === 'production') {
+      //   if (usedScopeClasses.has(scopeClassKey)) {
+      //     console.warn(
+      //       `[SWD-ERR] Class ".${clsName}" in scope "${scopeName}" is already used in another file.`
+      //     );
+      //   }
+      // }
       usedScopeClasses.add(scopeClassKey);
     }
 

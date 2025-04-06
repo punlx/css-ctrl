@@ -1,5 +1,3 @@
-// src/client/styledUtils/buildVariableName.ts
-
 /**
  * buildVariableName:
  * - ประกอบชื่อ CSS variable ตรงกับ transformVariables.ts

@@ -1,5 +1,5 @@
 // src/shared/parseStyles/parseBaseStyle.ts
-import { typographyDict } from '../../client/theme';
+// import { typographyDict } from '../../client/theme';
 import { abbrMap } from '../constant';
 import { IStyleDefinition } from '../parseStyles.types';
 import {
@@ -8,7 +8,6 @@ import {
   detectImportantSuffix,
 } from './parseStylesUtils';
 
-import { globalDefineMap } from '../../client/theme';
 import { mergeStyleDef } from '../../client/styledUtils/mergeStyleDef';
 
 export function parseBaseStyle(
@@ -31,11 +30,11 @@ export function parseBaseStyle(
   }
 
   // 2) ถ้า abbr ซ้ำทั้ง abbrMap และ globalDefineMap => error
-  if (styleAbbr in abbrMap && styleAbbr in globalDefineMap) {
-    throw new Error(
-      `[SWD-ERR] "${styleAbbr}" is defined in both abbrMap and theme.define(...) - name collision not allowed.`
-    );
-  }
+  // if (styleAbbr in abbrMap && styleAbbr in globalDefineMap) {
+  //   throw new Error(
+  //     `[SWD-ERR] "${styleAbbr}" is defined in both abbrMap and theme.define(...) - name collision not allowed.`
+  //   );
+  // }
 
   // 3) local var: --&xxx
   if (styleAbbr.startsWith('--&')) {
@@ -101,24 +100,24 @@ export function parseBaseStyle(
   // 5) ถ้าไม่ใช่ localVar และไม่ใช่ $var => เช็ค abbrMap / globalDefineMap
   if (!(styleAbbr in abbrMap)) {
     // ลอง globalDefineMap
-    if (styleAbbr in globalDefineMap) {
-      const tokens = propValue.split(/\s+/).filter(Boolean);
-      if (tokens.length > 1) {
-        throw new Error(
-          `[SWD-ERR] Multiple subKey not allowed. Found: "${styleAbbr}[${propValue}]"`
-        );
-      }
-      const subK = tokens[0];
-      if (!subK) {
-        throw new Error(`[SWD-ERR] Missing subKey for "${styleAbbr}[...]"`);
-      }
-      const partialDef = globalDefineMap[styleAbbr][subK];
-      if (!partialDef) {
-        throw new Error(`[SWD-ERR] "${styleAbbr}[${subK}]" not found in theme.define(...)`);
-      }
-      mergeStyleDef(styleDef, partialDef);
-      return;
-    }
+    // if (styleAbbr in globalDefineMap) {
+    //   // const tokens = propValue.split(/\s+/).filter(Boolean);
+    //   // if (tokens.length > 1) {
+    //   //   throw new Error(
+    //   //     `[SWD-ERR] Multiple subKey not allowed. Found: "${styleAbbr}[${propValue}]"`
+    //   //   );
+    //   // }
+    //   // const subK = tokens[0];
+    //   // if (!subK) {
+    //   //   throw new Error(`[SWD-ERR] Missing subKey for "${styleAbbr}[...]"`);
+    //   // }
+    //   // const partialDef = globalDefineMap[styleAbbr][subK];
+    //   // if (!partialDef) {
+    //   //   throw new Error(`[SWD-ERR] "${styleAbbr}[${subK}]" not found in theme.define(...)`);
+    //   // }
+    //   // mergeStyleDef(styleDef, partialDef);
+    //   // return;
+    // }
     throw new Error(
       `"${styleAbbr}" not defined in abbrMap or theme.define(...) (abbrLine=${abbrLine})`
     );
@@ -126,16 +125,16 @@ export function parseBaseStyle(
 
   // 6) ถ้าอยู่ใน abbrMap => parse normal abbr ex. "bg[red]"
   if (styleAbbr === 'ty') {
-    const dictEntry = typographyDict.dict[propValue];
-    if (!dictEntry) {
-      throw new Error(
-        `[SWD-ERR] Typography key "${propValue}" not found in theme.typography(...) dict.`
-      );
-    }
-    for (const [cssProp, cssVal] of Object.entries(dictEntry)) {
-      styleDef.base[cssProp] = convertCSSVariable(cssVal) + (isImportant ? ' !important' : '');
-    }
-    return;
+    // const dictEntry = typographyDict.dict[propValue];
+    // if (!dictEntry) {
+    //   throw new Error(
+    //     `[SWD-ERR] Typography key "${propValue}" not found in theme.typography(...) dict.`
+    //   );
+    // }
+    // for (const [cssProp, cssVal] of Object.entries(dictEntry)) {
+    //   styleDef.base[cssProp] = convertCSSVariable(cssVal) + (isImportant ? ' !important' : '');
+    // }
+    // return;
   }
 
   const expansions = [`${styleAbbr}[${propValue}]`];

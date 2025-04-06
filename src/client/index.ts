@@ -1,3 +1,3 @@
 // src/client/index.ts
-export { styled } from './styled';
+export { css } from './css';
 export { theme } from './theme';

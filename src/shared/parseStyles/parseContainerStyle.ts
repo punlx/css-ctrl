@@ -1,6 +1,6 @@
 // src/shared/parseStyles/parseContainerStyle.ts
 
-import { breakpoints, typographyDict } from '../../client/theme';
+// import { breakpoints, typographyDict } from '../../client/theme';
 import { abbrMap } from '../constant';
 import { IStyleDefinition } from '../parseStyles.types';
 import {
@@ -26,9 +26,9 @@ export function parseContainerStyle(
 
   if (!(containerPart.startsWith('min') || containerPart.startsWith('max'))) {
     const [bp] = containerPart.split(', ');
-    if (breakpoints.dict[bp]) {
-      containerPart = containerPart.replace(bp, breakpoints.dict[bp]);
-    }
+    // if (breakpoints.dict[bp]) {
+    //   containerPart = containerPart.replace(bp, breakpoints.dict[bp]);
+    // }
   }
 
   const bracketOpen = containerPart.indexOf('[');
@@ -71,14 +71,14 @@ export function parseContainerStyle(
       // เดิม: if (abbr2 === 'f') => fontDict
       // ใหม่: if (abbr2 === 'ty') => typographyDict
       if (abbr2 === 'ty') {
-        const dictEntry = typographyDict.dict[val2] as Record<string, string> | undefined;
-        if (!dictEntry) {
-          throw new Error(`"${val2}" not found in theme.typography(...) (container).`);
-        }
-        for (const [cssProp2, cssVal2] of Object.entries(dictEntry)) {
-          containerProps[cssProp2] =
-            convertCSSVariable(cssVal2) + (isImportant ? ' !important' : '');
-        }
+        // const dictEntry = typographyDict.dict[val2] as Record<string, string> | undefined;
+        // if (!dictEntry) {
+        //   throw new Error(`"${val2}" not found in theme.typography(...) (container).`);
+        // }
+        // for (const [cssProp2, cssVal2] of Object.entries(dictEntry)) {
+        //   containerProps[cssProp2] =
+        //     convertCSSVariable(cssVal2) + (isImportant ? ' !important' : '');
+        // }
       } else {
         const cProp2 = abbrMap[abbr2 as keyof typeof abbrMap];
         if (!cProp2) {

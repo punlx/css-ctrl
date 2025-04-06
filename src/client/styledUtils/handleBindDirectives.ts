@@ -1,6 +1,4 @@
-// src/client/styledUtils/handleBindDirectives.ts
-
-import { IParsedDirective } from "../parseDirectives";
+import { IParsedDirective } from '../parseDirectives';
 
 /**
  * handleBindDirectives(scopeName, directives, resultObj):

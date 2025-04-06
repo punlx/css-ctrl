@@ -1,5 +1,3 @@
-// src/client/styledUtils/ensureScopeUnique.ts
-
 export const usedScopes = new Set<string>();
 
 /**
@@ -16,11 +14,11 @@ export function ensureScopeUnique(scopeName: string) {
   }
 
   // Production: เตือนว่าซ้ำตามปกติ
-  if (process.env.NODE_ENV === 'production') {
-    if (usedScopes.has(scopeName)) {
-      console.warn(`[SWD-ERR] scope "${scopeName}" is already used in another file.`);
-    }
-  }
+  // if (process.env.NODE_ENV === 'production') {
+  //   if (usedScopes.has(scopeName)) {
+  //     console.warn(`[SWD-ERR] scope "${scopeName}" is already used in another file.`);
+  //   }
+  // }
   // dev -> เดิมอาจ skip เตือนซ้ำ แต่ตัวอย่างนี้ใส่ลง set ปกติ
   usedScopes.add(scopeName);
 }

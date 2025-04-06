@@ -1,9 +1,6 @@
 // src/client/processOneClass.ts
 
 import { insertedRulesMap, IInsertedRules } from './constant';
-import { insertCSSRules, scheduleRemoveDisplayNames } from './insertCSSRules';
-import { isServer } from '../server/constant';
-import { serverStyleSheet } from '../server/ServerStyleSheetInstance';
 import { transFormVariables } from './transFormVariables';
 import { transformLocalVariables } from './transformLocalVariables';
 import { IStyleDefinition } from '../shared/parseStyles.types';
@@ -26,19 +23,19 @@ export function processOneClass(
   const key = scopeName === 'none' ? `none_${className}` : `${scopeName}_${className}`;
 
   // Production -> ใช้ cache
-  if (process.env.NODE_ENV === 'production') {
-    const cached = insertedRulesMap.get(key);
-    if (cached) {
-      return cached.displayName;
-    }
-  } else {
-    // Dev/HMR: ลบ rule เก่าก่อน
-    const old = insertedRulesMap.get(key);
-    if (old) {
-      scheduleRemoveDisplayNames([old.displayName]);
-      insertedRulesMap.delete(key);
-    }
-  }
+  // if (process.env.NODE_ENV === 'production') {
+  //   const cached = insertedRulesMap.get(key);
+  //   if (cached) {
+  //     return cached.displayName;
+  //   }
+  // } else {
+  //   // Dev/HMR: ลบ rule เก่าก่อน
+  //   const old = insertedRulesMap.get(key);
+  //   if (old) {
+  //     scheduleRemoveDisplayNames([old.displayName]);
+  //     insertedRulesMap.delete(key);
+  //   }
+  // }
 
   // กำหนด displayName
   let displayName: string;
@@ -66,11 +63,6 @@ export function processOneClass(
   }
 
   // Insert CSS (SSR หรือ Client)
-  if (isServer) {
-    serverStyleSheet().insertCSSRules(displayName, styleDef);
-  } else {
-    insertCSSRules(displayName, styleDef);
-  }
 
   // เก็บลง Map
   const inserted: IInsertedRules = { displayName };

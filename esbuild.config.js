@@ -9,22 +9,6 @@ async function runBuild() {
     minify: true,
     platform: 'browser',
     format: 'esm',
-    define: {
-      'process.env.NODE_ENV': 'process.env.NODE_ENV',
-    },
-  });
-
-  // 2) bundle/minify ฝั่ง server => dist/server.js
-  await build({
-    entryPoints: ['dist/server/server.js'],
-    outfile: 'dist/server.js',
-    bundle: true,
-    minify: true,
-    platform: 'node',
-    format: 'esm',
-    define: {
-      'process.env.NODE_ENV': 'process.env.NODE_ENV',
-    },
   });
 }
 

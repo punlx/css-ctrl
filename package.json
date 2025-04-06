@@ -7,10 +7,6 @@
     ".": {
       "import": "./dist/index.js",
       "require": "./dist/index.js"
-    },
-    "./server": {
-      "import": "./dist/server.js",
-      "require": "./dist/server.js"
     }
   },
   "files": [
@@ -18,11 +14,10 @@
   ],
   "scripts": {
     "build:client": "tsc -p tsconfig.client.json",
-    "build:server": "tsc -p tsconfig.server.json",
     "build:esbuild": "node esbuild.config.js",
-    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/styled.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/index.d.ts\" \"dist/server/**\" \"!dist/server/server.d.ts\" \"!dist/server/serverStyleSheet.d.ts\" \"dist/shared/**\" \"!dist/shared/parseStyles.types.d.ts\"",
+    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/css.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/index.d.ts\" \"dist/shared/**\" \"!dist/shared/parseStyles.types.d.ts\"",
     "generate:dts": "node scripts/generate-dts.js",
-    "build": "rm -rf dist && npm run build:client && npm run build:server && npm run build:esbuild && npm run clean:nonmin && npm run generate:dts",
+    "build": "rm -rf dist && npm run build:client && npm run build:esbuild && npm run clean:nonmin && npm run generate:dts",
     "test": "echo no test"
   },
   "devDependencies": {
