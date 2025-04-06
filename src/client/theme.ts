@@ -120,7 +120,6 @@ export const theme = {
       }
       resultObj[keyName] = keyframeRuntimeDict[keyName];
     }
-    console.log('theme.ts:146 |resultObj| : ', resultObj);
     return resultObj;
   },
 

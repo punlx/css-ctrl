@@ -57,40 +57,25 @@ export function buildVariableName(
 /************************************************************
  * 3) parseDisplayName(...)
  * - ถ้าไม่มี '_' => ถือว่า scope=none
- * - ถ้า scope=hash => จะต้องผ่าแบบพิเศษ "box_abc123" => scope='hash', cls='box_abc123'
- *   (ใน minimal นี้ สมมติ "hash" จะตรวจเจอด้วย check string ลงไปง่าย ๆ)
+ * - ถ้า scope=hash => จะคืน { scope: 'hash', cls: 'box_abc123' }
+ *   (วิธีเช็ค hash อาจดูความยาวหรือ regex)
  ************************************************************/
 export function parseDisplayName(displayName: string): { scope: string; cls: string } {
-  // ถ้า detect ว่าด้านท้ายมี "_abc123" ที่มาจาก generateClassId
-  // อาจจะถือว่า scope='hash'
-  // แต่ในที่นี้ เอาง่าย ๆ: เช็คว่ามี '_' หรือไม่
   const underscoreIdx = displayName.indexOf('_');
   if (underscoreIdx < 0) {
+    // ไม่มี underscore => scope=none
     return { scope: 'none', cls: displayName };
   }
 
-  // ลองเช็คว่าก่อนหน้า '_' คือ 'hash' รึเปล่า? -> อาจไม่ตรง logic เพราะ minimal
-  // ใน codebase ใหญ่ จะเก็บ scope ไว้ก่อน transform
-  // แต่ minimal: สมมติว่า scope != 'none' => "someScope_box" หรือ "box_abc123"
-  // จึงแยก scope= leftPart, cls=rightPart
-  // NOTE: ถ้า logic codebase จริง: "box_abc123" => scope=hash, cls="box_abc123"
-  // เราจะทำให้ scope='hash' โดย brute force ตรวจ
   const leftPart = displayName.slice(0, underscoreIdx);
   const rightPart = displayName.slice(underscoreIdx + 1);
 
-  // ถ้าเป็นกรณี "box_abc123" => leftPart="box", rightPart="abc123"
-  // minimal approach: scope='hash', cls="box_abc123"
-  // ถ้าเป็นกรณี "foo_box" => leftPart="foo", rightPart="box" => scope="foo", cls="box"
-
-  // สมมติ: ถ้า rightPart.length===6 หรือน้อยกว่านี้ (มักเป็น hash) => scope='hash'
-  if (rightPart.length >= 4 && rightPart.length <= 8) {
-    // เช็คคร่าว ๆ ว่าเป็น a-z0-9
-    if (/^[A-Za-z0-9-]+$/.test(rightPart)) {
-      // ถือว่าเป็น hashed
-      return { scope: 'hash', cls: displayName };
-    }
+  // เช็คคร่าว ๆ ถ้า rightPart มีความยาว ~4-8 และเป็น [A-Za-z0-9-] => ถือว่าเป็น hash
+  if (rightPart.length >= 4 && rightPart.length <= 8 && /^[A-Za-z0-9-]+$/.test(rightPart)) {
+    // ถือว่าเป็น hashed => scope='hash', cls='box_abc123'
+    return { scope: 'hash', cls: displayName };
   }
-  // else => scope=leftPart, cls=rightPart
+  // ไม่ใช่ hash => scope= leftPart, cls= rightPart
   return { scope: leftPart, cls: rightPart };
 }
 
@@ -135,6 +120,9 @@ function scheduleFlush() {
   }
 }
 
+/************************************************************
+ * 6) attachGetMethod => .get(...).set({ '$bg': 'red' })
+ ************************************************************/
 export function attachGetMethod<T extends Record<string, any>>(resultObj: CSSResult<T>): void {
   resultObj.get = function <K2 extends keyof T>(classKey: K2) {
     return {
@@ -192,7 +180,48 @@ export function attachGetMethod<T extends Record<string, any>>(resultObj: CSSRes
 }
 
 /************************************************************
+ * (NEW) parseClassBlocksWithBraceCounting
+ *    - เพื่อหา .className { ... } ที่มี nested brace ได้
+ ************************************************************/
+function parseClassBlocksWithBraceCounting(text: string): Array<{
+  className: string;
+  body: string;
+}> {
+  const result: Array<{ className: string; body: string }> = [];
+
+  // 1) regex จับจุดเริ่มต้นของ block => `.xxx {`
+  //    โดยไม่ครอบคลุม body ด้วย ([\s\S]*?) แบบเดิม
+  const pattern = /\.([\w-]+)\s*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    const clsName = match[1]; // "box" เช่น
+    // ตำแหน่งที่อยู่หลัง '{'
+    const startIndex = pattern.lastIndex;
+    let braceCount = 1;
+    let i = startIndex;
+    for (; i < text.length; i++) {
+      if (text[i] === '{') {
+        braceCount++;
+      } else if (text[i] === '}') {
+        braceCount--;
+      }
+      if (braceCount === 0) {
+        // เจอจุดปิดบล็อกแล้ว
+        break;
+      }
+    }
+    // i คือ index ของ '}' สุดท้าย (ปิด class block)
+    const body = text.slice(startIndex, i).trim();
+    result.push({ className: clsName, body });
+  }
+
+  return result;
+}
+
+/************************************************************
  * 7) ฟังก์ชัน css(...) minimal + handle @bind
+ *    - ใช้ parseClassBlocksWithBraceCounting แทน regex /([\s\S]*?)\}/
  ************************************************************/
 export function css<T extends Record<string, string[]>>(
   template: TemplateStringsArray
@@ -206,34 +235,31 @@ export function css<T extends Record<string, string[]>>(
     scopeName = scopeMatch[1].trim();
   }
 
-  // (B) parse .className { ... }
-  //     ถ้า scope=hash => ต้อง generate hash
-  const classRegex = /\.([\w-]+)\s*\{([\s\S]*?)\}/g;
+  // (B) ดึง .className { ... } ด้วย brace counting
+  const blocks = parseClassBlocksWithBraceCounting(text);
   const resultObj: Record<string, string> = {};
 
-  let match: RegExpExecArray | null;
-  while ((match = classRegex.exec(text)) !== null) {
-    const className = match[1];
-    const bodyInside = match[2];
+  // loop บล็อก => ตั้งชื่อ class
+  for (const b of blocks) {
+    const className = b.className;
+    const bodyInside = b.body;
 
     let finalName = className;
     if (scopeName === 'none') {
-      // ใช้ className เดิม e.g. "box"
       finalName = className;
     } else if (scopeName === 'hash') {
-      // generateClassId(...): ควรผูกกับ body หรือ text อะไรก็ได้
-      const hashedPart = generateClassId(className + bodyInside);
-      // ได้ e.g. "box_abc123"
+      const trimmedBody = bodyInside.replace(/\s+/g, '');
+      const hashedPart = generateClassId(className + trimmedBody);
       finalName = `${className}_${hashedPart}`;
     } else {
-      // scope=ปกติ => "scopeName_className" e.g. "app_box"
+      // scope=normal => scopeName_className
       finalName = `${scopeName}_${className}`;
     }
+
     resultObj[className] = finalName;
   }
 
   // (C) parse @bind <key> .classA .classB ...
-  // => resultObj[bindKey] = e.g. "app_box app_box2 ..."
   const bindRegex = /@bind\s+([\w-]+)\s+([^\r\n]+)/g;
   let bindMatch: RegExpExecArray | null;
   while ((bindMatch = bindRegex.exec(text)) !== null) {
@@ -244,18 +270,16 @@ export function css<T extends Record<string, string[]>>(
     const finalList: string[] = [];
     for (const r of refs) {
       if (!r.startsWith('.')) {
-        continue; // minimal: ข้าม
+        continue;
       }
       const shortCls = r.slice(1);
       if (resultObj[shortCls]) {
-        // ถ้ามีใน resultObj อยู่แล้ว
         finalList.push(resultObj[shortCls]);
       } else {
         // fallback
         if (scopeName === 'none') {
           finalList.push(shortCls);
         } else if (scopeName === 'hash') {
-          // สมมติ generateClassId() อีกที (หรือจะข้าม)
           const hashedPart = generateClassId(shortCls);
           finalList.push(`${shortCls}_${hashedPart}`);
         } else {
@@ -267,7 +291,7 @@ export function css<T extends Record<string, string[]>>(
     resultObj[bindKey] = finalList.join(' ');
   }
 
-  // (D) attach .get().set(...)
+  // (D) attach get().set(...)
   attachGetMethod(resultObj as CSSResult<T>);
 
   return resultObj as CSSResult<T>;
