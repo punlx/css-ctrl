@@ -6,7 +6,7 @@ import { handleBindDirectives } from './styledUtils/handleBindDirectives';
 import { processClassBlocks } from './styledUtils/processClassBlocks';
 import { attachGetMethod } from './styledUtils/scheduleFlush';
 
-export type StyledResult<T extends Record<string, string[]>> = {
+export type CSSResult<T extends Record<string, string[]>> = {
   [K in keyof T]: string; // map className -> final string e.g. "scope_class"
 } & {
   get: <K2 extends keyof T>(
@@ -22,9 +22,9 @@ export type StyledResult<T extends Record<string, string[]>> = {
  * - สร้างคลาสตาม scopeName_className
  * - return object สำหรับเข้าถึงชื่อคลาส + .get(...).set(...) แก้ตัวแปร
  */
-export function styled<T extends Record<string, string[]>>(
+export function css<T extends Record<string, string[]>>(
   template: TemplateStringsArray
-): StyledResult<T> {
+): CSSResult<T> {
   // 1) ได้ text จาก template (ถือว่าใช้ template[0] อย่างเดียว)
   const text = template[0];
 
@@ -56,5 +56,5 @@ export function styled<T extends Record<string, string[]>>(
   handleBindDirectives(scopeName, directives, resultObj);
 
   // 10) return
-  return resultObj as StyledResult<T>;
+  return resultObj as CSSResult<T>;
 }
