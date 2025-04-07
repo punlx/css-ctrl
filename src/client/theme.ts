@@ -94,14 +94,38 @@ function setTheme(mode: string, modes: string[]) {
   }
 }
 
+const initialTheme = (modes: string[]) => {
+  let saved = '';
+  let currentMode = '';
+  try {
+    saved = localStorage.getItem('css-ctrl-theme') || modes[0];
+  } catch {}
+
+  if (saved && modes.indexOf(saved) !== -1) {
+    setTheme(saved, modes);
+    currentMode = saved;
+  } else {
+    currentMode = modes[0];
+    setTheme(currentMode, modes);
+  }
+
+  return currentMode;
+};
+
 export const theme = {
   palette(colors: string[][]) {
     const modes = colors[0];
-
+    const initialMode = modes[0];
+    // for CSR
+    if (window !== undefined) {
+      initialTheme(modes);
+    }
     return {
       swtich: (mode: string) => setTheme(mode, modes),
       modes,
-      getCurrentMode: () => localStorage.getItem('css-ctrl-theme'),
+      getCurrentMode: () => localStorage?.getItem('css-ctrl-theme') || initialMode,
+      // for SSR
+      initialTheme: () => initialTheme(modes),
     };
   },
 

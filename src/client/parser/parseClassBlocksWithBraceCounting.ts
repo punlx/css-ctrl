@@ -1,4 +1,4 @@
-function parseClassBlocksWithBraceCounting(text: string): Array<{
+export function parseClassBlocksWithBraceCounting(text: string): Array<{
   className: string;
   body: string;
 }> {

@@ -1,4 +1,5 @@
 import { attachGetMethod } from './parser/attachGetMethod';
+import { parseClassBlocksWithBraceCounting } from './parser/parseClassBlocksWithBraceCounting';
 import { CSSResult } from './types';
 import { generateClassId } from './utils/hash';
 
