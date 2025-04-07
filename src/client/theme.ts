@@ -1,7 +1,5 @@
 // src/client/theme.ts
 
-/** ตั้ง theme mode (เช่น dark/light) */
-
 const keyframeRuntimeDict: Record<string, Record<string, { set: (props: any) => void }>> = {};
 
 function parseKeyframeAbbr(
