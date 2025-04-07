@@ -89,7 +89,7 @@ function setTheme(mode: string, modes: string[]) {
     document.documentElement.classList.remove(...modes);
     document.documentElement.classList.add(mode);
     try {
-      localStorage.setItem('styledwind-theme', mode);
+      localStorage.setItem('css-ctrl-theme', mode);
     } catch {}
   }
 }
@@ -101,7 +101,7 @@ export const theme = {
     return {
       swtich: (mode: string) => setTheme(mode, modes),
       modes,
-      getCurrentMode: () => localStorage.getItem('styledwind-theme'),
+      getCurrentMode: () => localStorage.getItem('css-ctrl-theme'),
     };
   },
 
