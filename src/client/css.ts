@@ -1,20 +1,58 @@
+/************************************************************
+ * 1) ชนิดข้อมูล Utility สำหรับเมธอด .set(...)
+ ************************************************************/
+
+/** แยกเฉพาะ $xxx */
+type ExtractGlobalKeys<A extends string> = A extends `$${string}` ? A : never;
+
+/** แยก $xxx หรือ &xxx */
+type ExtractLocalAndGlobalKeys<A extends string> = A extends `$${string}` | `&${string}`
+  ? A
+  : never;
+
+/** แปลง T[K] (string[]) => { '$bg'?: string } (เฉพาะ $xxx) */
+type PropsForGlobalClass<ClassArr extends string[]> = Partial<
+  Record<ExtractGlobalKeys<ClassArr[number]>, string>
+>;
+
+/** แปลง T[K] (string[]) => { '$bg'?: string, '&color'?: string } */
+type PropsForLocalAndGlobalClass<ClassArr extends string[]> = Partial<
+  Record<ExtractLocalAndGlobalKeys<ClassArr[number]>, string>
+>;
+
+/** กรณี .get(HTMLElement) => union ของคีย์ทั้งหมดใน T */
+type AllKeysOf<T extends Record<string, string[]>> = T[keyof T][number];
+
+type PropsForAllLocalAndGlobal<T extends Record<string, string[]>> = Partial<
+  Record<ExtractLocalAndGlobalKeys<AllKeysOf<T>>, string>
+>;
+
+/************************************************************
+ * 2) ประกาศชนิด CSSResult<T> + Overload Method
+ ************************************************************/
 export type CSSResult<T extends Record<string, string[]>> = {
-  [K in keyof T]: string; // map className -> final string e.g. "scope_class"
+  [K in keyof T]: string;
 } & {
-  get: <K2 extends keyof T>(
-    className: K2
-  ) => {
-    set: (props: Partial<Record<T[K2][number], string>>) => void;
+  // Overload 1: .get("classKey") => set เฉพาะ $xxx จาก T[classKey]
+  get<K2 extends keyof T>(
+    classKey: K2
+  ): {
+    set: (props: PropsForGlobalClass<T[K2]>) => void;
+  };
+  // Overload 2: .get(HTMLElement) => set() ได้ $xxx และ &xxx ทั้งหมด (Union)
+  get(el: HTMLElement): {
+    set: (props: PropsForAllLocalAndGlobal<T>) => void;
   };
 };
 
 /************************************************************
- * 1) โค้ดช่วยสร้าง hash => "box_abc123"
+ * 3) ฟังก์ชัน Utility ตามโค้ดต้นฉบับ (hash, parse, etc.)
  ************************************************************/
+
+/** โค้ด hash, buildVariableName, parseDisplayName, parseVariableAbbr ฯลฯ */
 function getAlphabeticChar(code: number): string {
   return String.fromCharCode(code < 26 ? code + 97 : code + 39);
 }
-
 function hashString(str: string): number {
   let h = 2929;
   for (let i = str.length - 1; i >= 0; i--) {
@@ -22,7 +60,6 @@ function hashString(str: string): number {
   }
   return h >>> 0;
 }
-
 function generateClassId(str: string): string {
   const code = hashString(str);
   const AD_REPLACER_R = /(a)(d)/gi;
@@ -39,9 +76,6 @@ function generateClassId(str: string): string {
   return name.replace(AD_REPLACER_R, '$1-$2');
 }
 
-/************************************************************
- * 2) ประกอบชื่อ runtime variable => e.g. "--bg-foo_box-hover"
- ************************************************************/
 export function buildVariableName(
   baseVarName: string,
   scope: string,
@@ -54,39 +88,24 @@ export function buildVariableName(
   return `--${baseVarName}-${scope}_${cls}`;
 }
 
-/************************************************************
- * 3) parseDisplayName(...)
- * - ถ้าไม่มี '_' => ถือว่า scope=none
- * - ถ้า scope=hash => จะคืน { scope: 'hash', cls: 'box_abc123' }
- *   (วิธีเช็ค hash อาจดูความยาวหรือ regex)
- ************************************************************/
 export function parseDisplayName(displayName: string): { scope: string; cls: string } {
   const underscoreIdx = displayName.indexOf('_');
   if (underscoreIdx < 0) {
-    // ไม่มี underscore => scope=none
     return { scope: 'none', cls: displayName };
   }
-
   const leftPart = displayName.slice(0, underscoreIdx);
   const rightPart = displayName.slice(underscoreIdx + 1);
-
-  // เช็คคร่าว ๆ ถ้า rightPart มีความยาว ~4-8 และเป็น [A-Za-z0-9-] => ถือว่าเป็น hash
   if (rightPart.length >= 4 && rightPart.length <= 8 && /^[A-Za-z0-9-]+$/.test(rightPart)) {
-    // ถือว่าเป็น hashed => scope='hash', cls='box_abc123'
     return { scope: 'hash', cls: displayName };
   }
-  // ไม่ใช่ hash => scope= leftPart, cls= rightPart
   return { scope: leftPart, cls: rightPart };
 }
 
-/************************************************************
- * 4) parseVariableAbbr("$bg-hover") => { baseVarName:"bg", suffix:"hover" }
- ************************************************************/
 export function parseVariableAbbr(abbr: string): {
   baseVarName: string;
   suffix: string;
 } {
-  const varNameFull = abbr.startsWith('$') ? abbr.slice(1) : abbr;
+  const varNameFull = abbr.startsWith('$') || abbr.startsWith('&') ? abbr.slice(1) : abbr;
   let baseVarName = varNameFull;
   let suffix = '';
   const dashIdx = varNameFull.lastIndexOf('-');
@@ -98,105 +117,18 @@ export function parseVariableAbbr(abbr: string): {
 }
 
 /************************************************************
- * 5) จัดการ schedule flush ตัวแปร
- ************************************************************/
-const pendingVars: Record<string, string> = {};
-let rafScheduled = false;
-
-function flushVars() {
-  for (const [varName, val] of Object.entries(pendingVars)) {
-    document.documentElement.style.setProperty(varName, val);
-  }
-  for (const k in pendingVars) {
-    delete pendingVars[k];
-  }
-  rafScheduled = false;
-}
-
-function scheduleFlush() {
-  if (!rafScheduled) {
-    rafScheduled = true;
-    requestAnimationFrame(flushVars);
-  }
-}
-
-/************************************************************
- * 6) attachGetMethod => .get(...).set({ '$bg': 'red' })
- ************************************************************/
-export function attachGetMethod<T extends Record<string, any>>(resultObj: CSSResult<T>): void {
-  resultObj.get = function <K2 extends keyof T>(classKey: K2) {
-    return {
-      set: (props: Partial<Record<string, string>>) => {
-        const displayName = resultObj[classKey as string];
-        if (!displayName) return;
-
-        // parseDisplayName -> { scope, cls }
-        const { scope, cls } = parseDisplayName(displayName);
-
-        for (const abbr in props) {
-          let val = props[abbr];
-          if (!val) continue;
-
-          const { baseVarName, suffix } = parseVariableAbbr(abbr);
-
-          // ถ้า scope=none => `--bg-box`
-          // ถ้า scope=foo => `--bg-foo_box`
-          // ถ้า scope=hash => `--bg-box_abc123`
-          if (scope === 'none') {
-            // e.g. `--bg-box-hover`
-            const finalVar = suffix
-              ? `--${baseVarName}-${cls}-${suffix}`
-              : `--${baseVarName}-${cls}`;
-            if (val.includes('--')) {
-              val = val.replace(/(--[\w-]+)/g, 'var($1)');
-            }
-            pendingVars[finalVar] = val;
-          } else if (scope === 'hash') {
-            // e.g. scope=hash => displayName="box_abc123", cls="box_abc123"
-            // => var name: `--bg-box_abc123-hover`
-            const finalVar = suffix
-              ? `--${baseVarName}-${cls}-${suffix}`
-              : `--${baseVarName}-${cls}`;
-            if (val.includes('--')) {
-              val = val.replace(/(--[\w-]+)/g, 'var($1)');
-            }
-            pendingVars[finalVar] = val;
-          } else {
-            // e.g. scope="app" => displayName="app_box", cls="box"
-            // => var name: `--bg-app_box-hover`
-            const finalVar = suffix
-              ? `--${baseVarName}-${scope}_${cls}-${suffix}`
-              : `--${baseVarName}-${scope}_${cls}`;
-            if (val.includes('--')) {
-              val = val.replace(/(--[\w-]+)/g, 'var($1)');
-            }
-            pendingVars[finalVar] = val;
-          }
-        }
-        scheduleFlush();
-      },
-    };
-  };
-}
-
-/************************************************************
- * (NEW) parseClassBlocksWithBraceCounting
- *    - เพื่อหา .className { ... } ที่มี nested brace ได้
+ * 4) parseClassBlocksWithBraceCounting
  ************************************************************/
 function parseClassBlocksWithBraceCounting(text: string): Array<{
   className: string;
   body: string;
 }> {
   const result: Array<{ className: string; body: string }> = [];
-
-  // 1) regex จับจุดเริ่มต้นของ block => `.xxx {`
-  //    โดยไม่ครอบคลุม body ด้วย ([\s\S]*?) แบบเดิม
   const pattern = /\.([\w-]+)\s*\{/g;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(text)) !== null) {
-    const clsName = match[1]; // "box" เช่น
-    // ตำแหน่งที่อยู่หลัง '{'
+    const clsName = match[1];
     const startIndex = pattern.lastIndex;
     let braceCount = 1;
     let i = startIndex;
@@ -207,43 +139,204 @@ function parseClassBlocksWithBraceCounting(text: string): Array<{
         braceCount--;
       }
       if (braceCount === 0) {
-        // เจอจุดปิดบล็อกแล้ว
         break;
       }
     }
-    // i คือ index ของ '}' สุดท้าย (ปิด class block)
     const body = text.slice(startIndex, i).trim();
     result.push({ className: clsName, body });
   }
-
   return result;
 }
 
 /************************************************************
- * 7) ฟังก์ชัน css(...) minimal + handle @bind
- *    - ใช้ parseClassBlocksWithBraceCounting แทน regex /([\s\S]*?)\}/
+ * 5) Queue + flushAll (ใช้ Map แทน object)
+ ************************************************************/
+let rafScheduled = false;
+const pendingGlobalVars = new Map<string, string>();
+const pendingLocalMap = new Map<HTMLElement, Record<string, string>>();
+
+function flushAll() {
+  // 1) Global
+  for (const [varName, val] of pendingGlobalVars.entries()) {
+    document.documentElement.style.setProperty(varName, val);
+  }
+  pendingGlobalVars.clear();
+
+  // 2) Local
+  for (const [el, props] of pendingLocalMap.entries()) {
+    for (const [propName, propVal] of Object.entries(props)) {
+      el.style.setProperty(propName, propVal);
+    }
+  }
+  pendingLocalMap.clear();
+
+  rafScheduled = false;
+}
+
+function scheduleFlush() {
+  if (!rafScheduled) {
+    rafScheduled = true;
+    requestAnimationFrame(flushAll);
+  }
+}
+
+/************************************************************
+ * 6) Helper: findFirstDisplayNameFromElement
+ ************************************************************/
+function findFirstDisplayNameFromElement<T extends Record<string, string[]>>(
+  el: HTMLElement,
+  resultObj: CSSResult<T>
+): string | null {
+  const classList = (el.className || '').split(/\s+/).filter(Boolean);
+  for (const c of classList) {
+    for (const key in resultObj) {
+      if (typeof resultObj[key] === 'string' && resultObj[key] === c) {
+        return c; // finalName
+      }
+    }
+  }
+  return null;
+}
+
+/************************************************************
+ * 7) attachGetMethod => Overload
+ ************************************************************/
+export function attachGetMethod<T extends Record<string, string[]>>(resultObj: CSSResult<T>): void {
+  // Overloads
+  function get<K2 extends keyof T>(
+    classKey: K2
+  ): {
+    set: (props: PropsForGlobalClass<T[K2]>) => void;
+  };
+  function get(el: HTMLElement): {
+    set: (props: PropsForAllLocalAndGlobal<T>) => void;
+  };
+
+  // Implementation
+  function get(arg: string | HTMLElement) {
+    if (typeof arg === 'string') {
+      /** CASE 1: .get("box") => set(...) */
+      const displayName = resultObj[arg];
+      if (!displayName) {
+        return { set: () => {} };
+      }
+      const { scope, cls } = parseDisplayName(displayName);
+
+      return {
+        set(props: Record<string, string | undefined>) {
+          // (Cast) เพราะเรารู้อยู่แล้วว่า props เป็น PropsForGlobalClass<T[K2]>
+          for (const abbr in props) {
+            let val = props[abbr];
+            if (!val) continue;
+            const { baseVarName, suffix } = parseVariableAbbr(abbr);
+
+            let finalVarName = '';
+            if (scope === 'none') {
+              finalVarName = suffix
+                ? `--${baseVarName}-${cls}-${suffix}`
+                : `--${baseVarName}-${cls}`;
+            } else if (scope === 'hash') {
+              finalVarName = suffix
+                ? `--${baseVarName}-${cls}-${suffix}`
+                : `--${baseVarName}-${cls}`;
+            } else {
+              finalVarName = buildVariableName(baseVarName, scope, cls, suffix);
+            }
+            if (val.includes('--')) {
+              val = val.replace(/(--[\w-]+)/g, 'var($1)');
+            }
+            pendingGlobalVars.set(finalVarName, val);
+          }
+          scheduleFlush();
+        },
+      };
+    } else {
+      /** CASE 2: .get(HTMLElement) => set(...) */
+      const el = arg;
+      return {
+        set(props: Record<string, string | undefined>) {
+          const matchedDisplayName = findFirstDisplayNameFromElement(el, resultObj);
+          const parsed = matchedDisplayName
+            ? parseDisplayName(matchedDisplayName)
+            : { scope: 'none', cls: '' };
+
+          for (const abbr in props) {
+            let val = props[abbr];
+            if (!val) continue;
+
+            if (abbr.startsWith('&')) {
+              // local style
+              const { baseVarName, suffix } = parseVariableAbbr(abbr);
+              let localVar = '';
+              if (parsed.scope === 'none') {
+                localVar = suffix
+                  ? `--${baseVarName}-${parsed.cls}-${suffix}`
+                  : `--${baseVarName}-${parsed.cls}`;
+              } else if (parsed.scope === 'hash') {
+                localVar = suffix
+                  ? `--${baseVarName}-${parsed.cls}-${suffix}`
+                  : `--${baseVarName}-${parsed.cls}`;
+              } else {
+                localVar = buildVariableName(baseVarName, parsed.scope, parsed.cls, suffix);
+              }
+              if (val.includes('--')) {
+                val = val.replace(/(--[\w-]+)/g, 'var($1)');
+              }
+              let existing = pendingLocalMap.get(el);
+              if (!existing) {
+                existing = {};
+              }
+              existing[localVar] = val;
+              pendingLocalMap.set(el, existing);
+            } else if (abbr.startsWith('$')) {
+              // global
+              const { baseVarName, suffix } = parseVariableAbbr(abbr);
+              let finalVarName: string;
+              if (parsed.scope === 'none') {
+                finalVarName = suffix
+                  ? `--${baseVarName}-${parsed.cls}-${suffix}`
+                  : `--${baseVarName}-${parsed.cls}`;
+              } else if (parsed.scope === 'hash') {
+                finalVarName = suffix
+                  ? `--${baseVarName}-${parsed.cls}-${suffix}`
+                  : `--${baseVarName}-${parsed.cls}`;
+              } else {
+                finalVarName = buildVariableName(baseVarName, parsed.scope, parsed.cls, suffix);
+              }
+              if (val.includes('--')) {
+                val = val.replace(/(--[\w-]+)/g, 'var($1)');
+              }
+              pendingGlobalVars.set(finalVarName, val);
+            }
+          }
+          scheduleFlush();
+        },
+      };
+    }
+  }
+
+  resultObj.get = get as CSSResult<T>['get'];
+}
+
+/************************************************************
+ * 8) ฟังก์ชัน css(...) => รวมทุกอย่าง
  ************************************************************/
 export function css<T extends Record<string, string[]>>(
   template: TemplateStringsArray
 ): CSSResult<T> {
   const text = template[0];
-
-  // (A) หา scope (@scope)
   let scopeName = 'none';
   const scopeMatch = text.match(/@scope\s+([^\r\n]+)/);
   if (scopeMatch) {
     scopeName = scopeMatch[1].trim();
   }
 
-  // (B) ดึง .className { ... } ด้วย brace counting
   const blocks = parseClassBlocksWithBraceCounting(text);
   const resultObj: Record<string, string> = {};
 
-  // loop บล็อก => ตั้งชื่อ class
   for (const b of blocks) {
     const className = b.className;
     const bodyInside = b.body;
-
     let finalName = className;
     if (scopeName === 'none') {
       finalName = className;
@@ -252,14 +345,12 @@ export function css<T extends Record<string, string[]>>(
       const hashedPart = generateClassId(className + trimmedBody);
       finalName = `${className}_${hashedPart}`;
     } else {
-      // scope=normal => scopeName_className
       finalName = `${scopeName}_${className}`;
     }
-
     resultObj[className] = finalName;
   }
 
-  // (C) parse @bind <key> .classA .classB ...
+  // parse @bind ...
   const bindRegex = /@bind\s+([\w-]+)\s+([^\r\n]+)/g;
   let bindMatch: RegExpExecArray | null;
   while ((bindMatch = bindRegex.exec(text)) !== null) {
@@ -269,14 +360,11 @@ export function css<T extends Record<string, string[]>>(
 
     const finalList: string[] = [];
     for (const r of refs) {
-      if (!r.startsWith('.')) {
-        continue;
-      }
+      if (!r.startsWith('.')) continue;
       const shortCls = r.slice(1);
       if (resultObj[shortCls]) {
         finalList.push(resultObj[shortCls]);
       } else {
-        // fallback
         if (scopeName === 'none') {
           finalList.push(shortCls);
         } else if (scopeName === 'hash') {
@@ -287,12 +375,9 @@ export function css<T extends Record<string, string[]>>(
         }
       }
     }
-
     resultObj[bindKey] = finalList.join(' ');
   }
 
-  // (D) attach get().set(...)
   attachGetMethod(resultObj as CSSResult<T>);
-
   return resultObj as CSSResult<T>;
 }
