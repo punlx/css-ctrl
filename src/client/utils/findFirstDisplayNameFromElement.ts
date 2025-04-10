@@ -1,3 +1,5 @@
+// src/client/utils/findFirstDisplayNameFromElement.ts
+
 import { CSSResult } from '../types';
 
 export function findFirstDisplayNameFromElement<T extends Record<string, string[]>>(

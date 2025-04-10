@@ -1,3 +1,5 @@
+// src/client/parser/attachGetMethod.ts
+
 import {
   CSSResult,
   PropsForAllLocalAndGlobal,

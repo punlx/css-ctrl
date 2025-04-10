@@ -1,3 +1,6 @@
+// src/client/utils/flushAll.ts
+
+
 let rafScheduled = false;
 export const pendingGlobalVars = new Map<string, string>();
 export const pendingLocalMap = new Map<HTMLElement, Record<string, string>>();

@@ -1,3 +1,5 @@
+// src/client/parser/parseClassBlocksWithBraceCounting.ts
+
 export function parseClassBlocksWithBraceCounting(text: string): Array<{
   className: string;
   body: string;

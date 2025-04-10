@@ -1,3 +1,5 @@
+// src/client/utils/parseVariableAbbr.ts
+
 export function parseVariableAbbr(abbr: string): {
   baseVarName: string;
   suffix: string;

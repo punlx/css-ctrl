@@ -1,3 +1,5 @@
+// src/client/utils/hash.ts
+
 function getAlphabeticChar(code: number): string {
   return String.fromCharCode(code < 26 ? code + 97 : code + 39);
 }

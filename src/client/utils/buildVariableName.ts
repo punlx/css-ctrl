@@ -1,3 +1,5 @@
+// src/client/utils/buildVariableName.ts
+
 export function buildVariableName(
   baseVarName: string,
   scope: string,
