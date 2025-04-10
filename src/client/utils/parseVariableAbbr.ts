@@ -4,9 +4,13 @@ export function parseVariableAbbr(abbr: string): {
   baseVarName: string;
   suffix: string;
 } {
-  const varNameFull = abbr.startsWith('$') || abbr.startsWith('&') ? abbr.slice(1) : abbr;
+  // (REMOVED) เดิมเคยเช็ค prefix $ หรือ & => abbr.slice(1)
+  // ตอนนี้ไม่มี prefix, ใช้ abbr ตรง ๆ
+
+  const varNameFull = abbr;
   let baseVarName = varNameFull;
   let suffix = '';
+
   const dashIdx = varNameFull.lastIndexOf('-');
   if (dashIdx > 0) {
     baseVarName = varNameFull.slice(0, dashIdx);
