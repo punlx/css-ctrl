@@ -2,7 +2,6 @@
 
 let rafScheduled = false;
 export const pendingGlobalVars = new Map<string, string>();
-// (REMOVED) export const pendingLocalMap = new Map<HTMLElement, Record<string, string>>();
 
 export function flushAll() {
   // 1) Global
@@ -11,13 +10,6 @@ export function flushAll() {
   }
   pendingGlobalVars.clear();
 
-  // (REMOVED) no local style usage
-  // for (const [el, props] of pendingLocalMap.entries()) {
-  //   for (const [propName, propVal] of Object.entries(props)) {
-  //     el.style.setProperty(propName, propVal);
-  //   }
-  // }
-  // pendingLocalMap.clear();
 
   rafScheduled = false;
 }

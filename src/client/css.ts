@@ -3,7 +3,6 @@
 import { attachGetMethod } from './parser/attachGetMethod';
 import { parseClassBlocksWithBraceCounting } from './parser/parseClassBlocksWithBraceCounting';
 import { CSSResult } from './types';
-// (REMOVED) import { generateClassId } from './utils/hash';
 
 export function css<T extends Record<string, string[]>>(
   template: TemplateStringsArray

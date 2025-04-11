@@ -6,20 +6,11 @@ import {
   PropsForGlobalClass,
 } from '../types';
 import { buildVariableName } from '../utils/buildVariableName';
-import {
-  /*findFirstDisplayNameFromElement,*/ /*pendingLocalMap,*/ pendingGlobalVars,
-  scheduleFlush,
-} from '../utils/flushAll';
+import { pendingGlobalVars, scheduleFlush } from '../utils/flushAll';
 import { parseDisplayName } from '../utils/parseDisplayName';
 import { parseVariableAbbr } from '../utils/parseVariableAbbr';
 
 export function attachGetMethod<T extends Record<string, string[]>>(resultObj: CSSResult<T>): void {
-  // (REMOVED) Overloads เดิม
-  // function get<K2 extends keyof T>(classKey: K2): ...
-  // function get(el: HTMLElement): ...
-  // function get<K2 extends keyof T>(classKey: K2, el: HTMLElement): ...
-
-  // (NEW) Overload เดียว
   function get<K2 extends keyof T>(
     classKey: K2
   ): {

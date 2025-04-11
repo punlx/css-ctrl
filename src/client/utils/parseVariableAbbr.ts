@@ -4,9 +4,6 @@ export function parseVariableAbbr(abbr: string): {
   baseVarName: string;
   suffix: string;
 } {
-  // (REMOVED) เดิมเคยเช็ค prefix $ หรือ & => abbr.slice(1)
-  // ตอนนี้ไม่มี prefix, ใช้ abbr ตรง ๆ
-
   const varNameFull = abbr;
   let baseVarName = varNameFull;
   let suffix = '';
