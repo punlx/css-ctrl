@@ -6,25 +6,28 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "require": "./dist/index.js"
+      "types": "./dist/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/$1.js",
+      "types": "./dist/$1.d.ts"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
+    "build:plugin": "tsc -p tsconfig.plugin.json",
     "build:client": "tsc -p tsconfig.client.json",
     "build:esbuild": "node esbuild.config.js",
-    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/css.d.ts\" \"!dist/client/types.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/index.d.ts\"",
+    "move:plugin": "node scripts/move-plugin.js",
+    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/*.d.ts\" \"!dist/client/index.d.ts\" \"!dist/client/css.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/types.d.ts\" \"dist/plugin/**\" \"!dist/plugin/types.d.ts\"",
     "generate:dts": "node scripts/generate-dts.js",
-    "build": "rm -rf dist && npm run build:client && npm run build:esbuild && npm run clean:nonmin && npm run generate:dts",
-    "test": "echo no test"
+    "build": "rm -rf dist && npm run build:plugin && npm run build:client && npm run build:esbuild && npm run move:plugin && npm run clean:nonmin && npm run generate:dts"
   },
   "devDependencies": {
     "del-cli": "^3.0.1",
     "esbuild": "^0.17.0",
     "typescript": "^4.9.5"
-  },
-  "author": "punl.x",
-  "license": "MIT"
+  }
 }
