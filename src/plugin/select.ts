@@ -68,7 +68,7 @@ export function select(
       selectByItem: (val: string) => void;
       unSelectByItem: (val: string) => void;
       unSelectAll: () => void;
-      getValues: () => DataItem[];
+      getSelectedValues: () => DataItem[];
     };
   };
 }> {
@@ -121,7 +121,10 @@ export function select(
     function handleContainerClick(evt: MouseEvent) {
       const el = (evt.target as HTMLElement).closest('[role="option"]') as HTMLElement | null;
       if (!el) return;
-
+      if (el.getAttribute('aria-disabled') === 'true') {
+        // ถ้าเป็น disabled => ข้ามเลย ไม่ทำงานอะไร
+        return;
+      }
       // call willSelect
       callEvent('willSelect', el);
       // ทำลอจิก select / unselect
@@ -215,7 +218,10 @@ export function select(
       if (!el) {
         throw new Error(`[CSS-CTRL-ERR] selectByItem: no data-value="${val}" found`);
       }
-
+      if (el.getAttribute('aria-disabled') === 'true') {
+        // ถ้าเป็น disabled => ข้ามเลย ไม่ทำงานอะไร
+        return;
+      }
       callEvent('willSelect', el);
       doSelectLogic(el);
     }
@@ -254,7 +260,7 @@ export function select(
       arr.length = 0;
     }
 
-    function getValues() {
+    function getSelectedValues() {
       return storage.selectedItems.map((s) => s.dataItem).filter(Boolean) as DataItem[];
     }
 
@@ -267,7 +273,7 @@ export function select(
           selectByItem,
           unSelectByItem,
           unSelectAll,
-          getValues,
+          getSelectedValues,
         },
       },
     };
