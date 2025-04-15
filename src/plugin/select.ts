@@ -1,139 +1,274 @@
 // src/plugin/select.ts
 
-import { CssCtrlPlugin } from './types';
+import { CssCtrlPlugin } from './types'; // สมมติว่า CssCtrlPlugin<T> = (storage: SelectStorage, className: string) => T
 
-// ====== 1) Type definitions เฉพาะ plugin นี้ =====
+/** โครงสร้างข้อมูลสำหรับ DataItem */
 interface DataItem {
-  val: string;
+  value: string;
+  display?: string;
   [key: string]: any;
 }
 
+/** ตัวเลือกตั้งต้นของ select plugin */
 interface SelectOptions {
-  toggleable?: boolean;
-  clearPrevious?: boolean;
+  toggleable?: boolean; // เลือกซ้ำตัวเดิม => unselect
+  clearPrevious?: boolean; // เลือกตัวใหม่ => เคลียร์ของเก่าทั้งหมด
 }
 
-// Callback Info
+/** โครงสร้างเก็บ item ที่ select */
+interface SelectedItem {
+  el: HTMLElement;
+  dataItem: DataItem | null;
+}
+
+/** ข้อมูลส่งเข้า callback */
 interface SelectCallbackInfo {
   value: DataItem | null;
-  list: DataItem[];
+  target: HTMLElement;
+  list: Array<{ value: DataItem | null; target: HTMLElement }>;
 }
 
-// Callback signature
-type SelectCallback = (info: SelectCallbackInfo, el: HTMLElement) => void;
-
-interface SelectObject {
-  target: HTMLElement | EventTarget;
-  data?: DataItem[];
-  selectable?: boolean | ((el: HTMLElement) => boolean);
-
-  willSelect?: SelectCallback;
-  select?: SelectCallback;
-  reSelect?: SelectCallback;
-  unSelect?: SelectCallback;
-  didSelect?: SelectCallback;
+/** 5 callback ใน events(...) */
+interface SelectEvents {
+  willSelect?: (info: SelectCallbackInfo) => void;
+  select?: (info: SelectCallbackInfo) => void;
+  didSelect?: (info: SelectCallbackInfo) => void;
+  unSelect?: (info: SelectCallbackInfo) => void;
+  reSelect?: (info: SelectCallbackInfo) => void;
 }
 
-// ====== 2) Plugin Function =====
+/** ข้อมูลสำหรับ init(...) */
+interface InitParams {
+  element: HTMLElement; // container <div role="listbox" class=...>
+  data: DataItem[]; // array ของ { value, display, ... }
+}
+
+/** interface ของ storage ที่ plugin จะใช้ */
+export interface SelectStorage extends Record<string, unknown> {
+  selectedItems: SelectedItem[];
+  _events: SelectEvents;
+  reselectAllowed: boolean;
+  unselectAllowed: boolean;
+
+  containerEl?: HTMLElement;
+  _selectData?: DataItem[];
+}
+
+/**
+ * สุดท้าย: export function select(...)
+ * จะคืน CssCtrlPlugin ซึ่งรับ storage: SelectStorage
+ */
 export function select(
   options: SelectOptions = { clearPrevious: true, toggleable: false }
 ): CssCtrlPlugin<{
-  select: (so: SelectObject) => void;
+  select: {
+    init: (params: InitParams) => void;
+    events: (ev: SelectEvents) => void;
+    actions: {
+      selectByItem: (val: string) => void;
+      unSelectByItem: (val: string) => void;
+      unSelectAll: () => void;
+      getValues: () => DataItem[];
+    };
+  };
 }> {
   const { toggleable = false, clearPrevious = true } = options;
 
-  // plugin function
-  return (storage, className) => {
-    console.log('select.ts:47 |className| : ', className);
+  // return ฟังก์ชัน (storage: SelectStorage, className: string) => ...
+  return (storage: SelectStorage, className: string) => {
     // ถ้ายังไม่มี selectedItems => สร้าง
     if (!storage.selectedItems) {
-      storage.selectedItems = [] as Array<{ el: HTMLElement; dataItem: DataItem | null }>;
+      storage.selectedItems = [];
+    }
+    // ถ้าไม่มี _events => สร้าง
+    if (!storage._events) {
+      storage._events = {};
     }
 
-    return {
-      select(so: SelectObject) {
-        const {
-          target,
-          data,
-          selectable = true,
-          willSelect,
-          select,
-          reSelect,
-          unSelect,
-          didSelect,
-        } = so;
+    // ตั้งค่าเริ่มต้นให้ reselectAllowed / unselectAllowed เป็น false
+    storage.reselectAllowed = false;
+    storage.unselectAllowed = false;
 
-        // หา [role="option"]
-        const el = (target as HTMLElement).closest('[role="option"]') as HTMLElement | null;
-        if (!el) return;
-        const currentTarget = el.closest('[role="listbox"]') as HTMLElement | null;
-        if (!currentTarget)
-          throw new Error('[CSS-CTRL-ERR] select plugin: must be used within role="listbox"');
-        if (!currentTarget.classList.contains(className)) {
-          throw new Error(`[CSS-CTRL-ERR] select plugin: must be within "${className}" container`);
-        }
+    // 1) init(...)
+    function init(params: InitParams) {
+      const { element, data } = params;
+      // ตรวจว่า element ตรงตาม [role="listbox"] + className
+      if (element.getAttribute('role') !== 'listbox' || !element.classList.contains(className)) {
+        throw new Error(
+          `[CSS-CTRL-ERR] init: element must be <div role="listbox" class="${className}">`
+        );
+        return;
+      }
+      // เก็บ container + data
+      storage.containerEl = element;
+      storage._selectData = data;
+      // ผูก event click
+      element.onclick = handleContainerClick;
+    }
 
-        if (el.getAttribute('aria-disabled') === 'true') return;
+    // 2) events(...)
+    function events(ev: SelectEvents) {
+      storage._events = {
+        willSelect: ev.willSelect,
+        select: ev.select,
+        didSelect: ev.didSelect,
+        unSelect: ev.unSelect,
+        reSelect: ev.reSelect,
+      };
+    }
 
-        // หา dataItem
-        let dataItem: DataItem | null = null;
-        const val = el.dataset.value;
-        if (data && val !== undefined) {
-          dataItem = data.find((d) => String(d.val) === String(val)) || null;
-        }
+    // handle คลิกใน container
+    function handleContainerClick(evt: MouseEvent) {
+      const el = (evt.target as HTMLElement).closest('[role="option"]') as HTMLElement | null;
+      if (!el) return;
 
-        // helper => สร้าง { data, list }
-        const buildInfo = (): SelectCallbackInfo => {
-          const all = (
-            storage.selectedItems as Array<{ el: HTMLElement; dataItem: DataItem | null }>
-          )
-            .map((s) => s.dataItem)
-            .filter(Boolean) as DataItem[];
-          return {
-            value: dataItem,
-            list: all,
-          };
-        };
+      // call willSelect
+      callEvent('willSelect', el);
+      // ทำลอจิก select / unselect
+      doSelectLogic(el);
+    }
 
-        willSelect?.(buildInfo(), el);
+    // ดึง dataItem จาก element
+    function findDataItem(el: HTMLElement): DataItem | null {
+      const data = storage._selectData || [];
+      const val = el.dataset.value;
+      if (!val) return null;
+      return data.find((d) => String(d.value) === val) || null;
+    }
 
-        // check exists
-        const arr = storage.selectedItems as Array<{ el: HTMLElement; dataItem: DataItem | null }>;
-        const existingIndex = arr.findIndex((s) => s.el === el);
-        const isSelected = existingIndex >= 0;
+    // สร้าง info สำหรับ callback
+    function buildInfo(el: HTMLElement): SelectCallbackInfo {
+      return {
+        value: findDataItem(el),
+        target: el,
+        list: storage.selectedItems.map((s) => ({
+          value: s.dataItem,
+          target: s.el,
+        })),
+      };
+    }
 
-        if (isSelected) {
-          // reSelect
-          reSelect?.(buildInfo(), el);
+    // เรียก callback (willSelect, select, didSelect, unSelect, reSelect)
+    function callEvent(name: keyof SelectEvents, el: HTMLElement) {
+      const cb = storage._events[name];
+      if (cb) {
+        cb(buildInfo(el));
+      }
+    }
 
-          if (!toggleable) return;
+    // ลอจิก select/unselect
+    function doSelectLogic(el: HTMLElement) {
+      storage.reselectAllowed = false;
+      storage.unselectAllowed = false;
 
-          // toggle off
+      const arr = storage.selectedItems;
+      const idx = arr.findIndex((s) => s.el === el);
+      const isSelected = idx >= 0;
+
+      if (isSelected) {
+        // reSelect
+        storage.reselectAllowed = true;
+        callEvent('reSelect', el);
+
+        if (toggleable) {
+          // remove item
           el.setAttribute('aria-selected', 'false');
-          arr.splice(existingIndex, 1);
-          unSelect?.(buildInfo(), el);
-          return;
+          arr.splice(idx, 1);
+
+          storage.unselectAllowed = true;
+          callEvent('unSelect', el);
         }
+        return;
+      }
 
-        // check selectable
-        const allowed = typeof selectable === 'function' ? selectable(el) : selectable !== false;
-        if (!allowed) return;
-
-        // single => unselect old
-        if (clearPrevious && arr.length > 0) {
-          for (const s of arr) {
-            s.el.setAttribute('aria-selected', 'false');
-            unSelect?.({ value: s.dataItem, list: [] }, s.el);
+      // ถ้าไม่เคย => clearPrevious => เคลียร์ของเก่าทั้งหมด
+      if (clearPrevious && arr.length > 0) {
+        for (const oldItem of [...arr]) {
+          oldItem.el.setAttribute('aria-selected', 'false');
+          const oldIdx = arr.findIndex((x) => x.el === oldItem.el);
+          if (oldIdx >= 0) {
+            arr.splice(oldIdx, 1);
           }
-          arr.length = 0;
+          storage.unselectAllowed = true;
+          callEvent('unSelect', oldItem.el);
         }
+      }
 
-        // select new
-        el.setAttribute('aria-selected', 'true');
-        arr.push({ el, dataItem });
+      // select ใหม่
+      el.setAttribute('aria-selected', 'true');
+      arr.push({ el, dataItem: findDataItem(el) });
 
-        select?.(buildInfo(), el);
-        didSelect?.(buildInfo(), el);
+      callEvent('select', el);
+      callEvent('didSelect', el);
+    }
+
+    // actions
+
+    function selectByItem(val: string) {
+      const container = storage.containerEl;
+      if (!container) {
+        throw new Error('[CSS-CTRL-ERR] selectByItem: no containerEl');
+      }
+      const el = container.querySelector(
+        `[role="option"][data-value="${val}"]`
+      ) as HTMLElement | null;
+      if (!el) {
+        throw new Error(`[CSS-CTRL-ERR] selectByItem: no data-value="${val}" found`);
+      }
+
+      callEvent('willSelect', el);
+      doSelectLogic(el);
+    }
+
+    function unSelectByItem(val: string) {
+      const container = storage.containerEl;
+      if (!container) {
+        throw new Error(`[CSS-CTRL-ERR] unSelectByItem: no containerEl`);
+
+        return;
+      }
+      const el = container.querySelector(
+        `[role="option"][data-value="${val}"]`
+      ) as HTMLElement | null;
+      if (!el) {
+        throw new Error(`[CSS-CTRL-ERR] unSelectByItem: no data-value="${val}"`);
+        return;
+      }
+
+      // ลบของจริง
+      const arr = storage.selectedItems;
+      const idx = arr.findIndex((it) => it.el === el);
+      if (idx >= 0) {
+        el.setAttribute('aria-selected', 'false');
+        arr.splice(idx, 1);
+      }
+      callEvent('unSelect', el);
+    }
+
+    function unSelectAll() {
+      const arr = storage.selectedItems;
+      for (const it of [...arr]) {
+        it.el.setAttribute('aria-selected', 'false');
+        callEvent('unSelect', it.el);
+      }
+      arr.length = 0;
+    }
+
+    function getValues() {
+      return storage.selectedItems.map((s) => s.dataItem).filter(Boolean) as DataItem[];
+    }
+
+    // return สุดท้าย
+    return {
+      select: {
+        init,
+        events,
+        actions: {
+          selectByItem,
+          unSelectByItem,
+          unSelectAll,
+          getValues,
+        },
       },
     };
   };

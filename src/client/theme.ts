@@ -1,5 +1,7 @@
 // src/client/theme.ts
 
+import { plugin } from '../shared/constants';
+
 const keyframeRuntimeDict: Record<string, Record<string, { set: (props: any) => void }>> = {};
 
 function parseKeyframeAbbr(
@@ -150,4 +152,8 @@ export const theme = {
   variable(variableMap: Record<string, string>) {},
 
   define(styleMap: Record<string, Record<string, string>>) {},
+
+  plugin(framework: Record<string, Record<string, unknown>>) {
+    plugin.react = framework.react;
+  },
 };

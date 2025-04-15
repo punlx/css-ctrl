@@ -1,6 +1,6 @@
 {
   "name": "css-ctrl",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
@@ -8,9 +8,17 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./*": {
-      "import": "./dist/$1.js",
-      "types": "./dist/$1.d.ts"
+    "./select": {
+      "import": "./dist/select.js",
+      "types": "./dist/select.d.ts"
+    },
+    "./dialog": {
+      "import": "./dist/dialog.js",
+      "types": "./dist/dialog.d.ts"
+    },
+    "./popover": {
+      "import": "./dist/popover.js",
+      "types": "./dist/popover.d.ts"
     }
   },
   "files": [
@@ -21,7 +29,7 @@
     "build:client": "tsc -p tsconfig.client.json",
     "build:esbuild": "node esbuild.config.js",
     "move:plugin": "node scripts/move-plugin.js",
-    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/*.d.ts\" \"!dist/client/index.d.ts\" \"!dist/client/css.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/types.d.ts\" \"dist/plugin/**\" \"!dist/plugin/types.d.ts\"",
+    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/*.d.ts\" \"!dist/client/index.d.ts\" \"!dist/client/css.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/types.d.ts\" \"dist/plugin/**\" \"!dist/plugin/types.d.ts\" \"dist/shared/**\" \"!dist/shared/plugin.types.d.ts\"",
     "generate:dts": "node scripts/generate-dts.js",
     "build": "rm -rf dist && npm run build:plugin && npm run build:client && npm run build:esbuild && npm run move:plugin && npm run clean:nonmin && npm run generate:dts"
   },

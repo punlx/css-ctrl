@@ -6,10 +6,11 @@
  * Plugin คือฟังก์ชันที่รับ 'storage' (object)
  * แล้วคืนออบเจ็กต์ที่มี methods สำหรับใช้งาน (เช่น { select(...), ... }).
  */
-export type CssCtrlPlugin<PluginMethods extends object> = (
-  storage: Record<string, unknown>,
-  classKey: string
-) => PluginMethods;
+// ถ้าจะฟิกว่า CssCtrlPlugin<T> = (storage: SelectStorage, className: string) => T
+import { SelectStorage } from './select'; // หรือที่ไหนก็ตาม
+
+export type CssCtrlPlugin<T> = (storage: SelectStorage, className: string) => T;
+
 // src/client/utils/unionToIntersection.ts
 
 /**

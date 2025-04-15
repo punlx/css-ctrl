@@ -9,6 +9,8 @@ import { pendingGlobalVars, scheduleFlush } from '../utils/flushAll';
 
 import { CssCtrlPlugin } from '../../plugin/types';
 import { UnionToIntersection } from '../../plugin/types';
+import { plugin } from '../../shared/constants';
+import { SelectStorage } from '../../plugin/select';
 
 /**
  * attachGetMethod - ฟังก์ชันที่จะถูกเรียกในตอนสร้าง resultObj
@@ -80,7 +82,9 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
     const { scope, cls } = parseDisplayName(displayName);
 
     // สร้าง storage (object) สำหรับ plugin เก็บ state
-    const storage: Record<string, unknown> = {};
+    const storage = {
+      plugin,
+    } as unknown as SelectStorage;
 
     // baseObj มี .set(...)
     const baseObj = {
@@ -104,9 +108,13 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
 
     // รวม methods จาก plugin ทั้งหมด
     let combinedMethods = {} as UnionToIntersection<ReturnType<(typeof plugins)[number]>>;
-    for (const plugin of plugins) {
-      const methods = plugin(storage, displayName);
-      combinedMethods = { ...combinedMethods, ...methods };
+
+    for (const pg of plugins) {
+      const pluginObj = pg(storage, displayName);
+      // แทนที่จะ merge ตรงๆ เราจะวน key เพื่อให้ plugin สามารถมีโครงสร้าง nested ได้
+      for (const key of Object.keys(pluginObj)) {
+        (combinedMethods as any)[key] = pluginObj[key];
+      }
     }
 
     // สร้าง finalObj = baseObj + combinedMethods
