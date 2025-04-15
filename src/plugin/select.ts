@@ -45,13 +45,15 @@ interface InitParams {
 
 /** interface ของ storage ที่ plugin จะใช้ */
 export interface SelectStorage extends Record<string, unknown> {
-  selectedItems: SelectedItem[];
-  _events: SelectEvents;
-  reselectAllowed: boolean;
-  unselectAllowed: boolean;
+  select: {
+    selectedItems: SelectedItem[];
+    _events: SelectEvents;
+    reselectAllowed: boolean;
+    unselectAllowed: boolean;
 
-  containerEl?: HTMLElement;
-  _selectData?: DataItem[];
+    containerEl?: HTMLElement;
+    _selectData?: DataItem[];
+  };
 }
 
 /**
@@ -77,17 +79,20 @@ export function select(
   // return ฟังก์ชัน (storage: SelectStorage, className: string) => ...
   return (storage: SelectStorage, className: string) => {
     // ถ้ายังไม่มี selectedItems => สร้าง
-    if (!storage.selectedItems) {
-      storage.selectedItems = [];
+    if (!storage.select) {
+      storage.select = {} as SelectStorage['select'];
+    }
+    if (!storage.select.selectedItems) {
+      storage.select.selectedItems = [];
     }
     // ถ้าไม่มี _events => สร้าง
-    if (!storage._events) {
-      storage._events = {};
+    if (!storage.select._events) {
+      storage.select._events = {};
     }
 
     // ตั้งค่าเริ่มต้นให้ reselectAllowed / unselectAllowed เป็น false
-    storage.reselectAllowed = false;
-    storage.unselectAllowed = false;
+    storage.select.reselectAllowed = false;
+    storage.select.unselectAllowed = false;
 
     // 1) init(...)
     function init(params: InitParams) {
@@ -100,15 +105,15 @@ export function select(
         return;
       }
       // เก็บ container + data
-      storage.containerEl = element;
-      storage._selectData = data;
+      storage.select.containerEl = element;
+      storage.select._selectData = data;
       // ผูก event click
       element.onclick = handleContainerClick;
     }
 
     // 2) events(...)
     function events(ev: SelectEvents) {
-      storage._events = {
+      storage.select._events = {
         willSelect: ev.willSelect,
         select: ev.select,
         didSelect: ev.didSelect,
@@ -133,7 +138,7 @@ export function select(
 
     // ดึง dataItem จาก element
     function findDataItem(el: HTMLElement): DataItem | null {
-      const data = storage._selectData || [];
+      const data = storage.select._selectData || [];
       const val = el.dataset.value;
       if (!val) return null;
       return data.find((d) => String(d.value) === val) || null;
@@ -144,7 +149,7 @@ export function select(
       return {
         value: findDataItem(el),
         target: el,
-        list: storage.selectedItems.map((s) => ({
+        list: storage.select.selectedItems.map((s) => ({
           value: s.dataItem,
           target: s.el,
         })),
@@ -153,7 +158,7 @@ export function select(
 
     // เรียก callback (willSelect, select, didSelect, unSelect, reSelect)
     function callEvent(name: keyof SelectEvents, el: HTMLElement) {
-      const cb = storage._events[name];
+      const cb = storage.select._events[name];
       if (cb) {
         cb(buildInfo(el));
       }
@@ -161,16 +166,16 @@ export function select(
 
     // ลอจิก select/unselect
     function doSelectLogic(el: HTMLElement) {
-      storage.reselectAllowed = false;
-      storage.unselectAllowed = false;
+      storage.select.reselectAllowed = false;
+      storage.select.unselectAllowed = false;
 
-      const arr = storage.selectedItems;
+      const arr = storage.select.selectedItems;
       const idx = arr.findIndex((s) => s.el === el);
       const isSelected = idx >= 0;
 
       if (isSelected) {
         // reSelect
-        storage.reselectAllowed = true;
+        storage.select.reselectAllowed = true;
         callEvent('reSelect', el);
 
         if (toggleable) {
@@ -178,7 +183,7 @@ export function select(
           el.setAttribute('aria-selected', 'false');
           arr.splice(idx, 1);
 
-          storage.unselectAllowed = true;
+          storage.select.unselectAllowed = true;
           callEvent('unSelect', el);
         }
         return;
@@ -192,7 +197,7 @@ export function select(
           if (oldIdx >= 0) {
             arr.splice(oldIdx, 1);
           }
-          storage.unselectAllowed = true;
+          storage.select.unselectAllowed = true;
           callEvent('unSelect', oldItem.el);
         }
       }
@@ -208,7 +213,7 @@ export function select(
     // actions
 
     function selectByItem(val: string) {
-      const container = storage.containerEl;
+      const container = storage.select.containerEl;
       if (!container) {
         throw new Error('[CSS-CTRL-ERR] selectByItem: no containerEl');
       }
@@ -227,7 +232,7 @@ export function select(
     }
 
     function unSelectByItem(val: string) {
-      const container = storage.containerEl;
+      const container = storage.select.containerEl;
       if (!container) {
         throw new Error(`[CSS-CTRL-ERR] unSelectByItem: no containerEl`);
 
@@ -242,7 +247,7 @@ export function select(
       }
 
       // ลบของจริง
-      const arr = storage.selectedItems;
+      const arr = storage.select.selectedItems;
       const idx = arr.findIndex((it) => it.el === el);
       if (idx >= 0) {
         el.setAttribute('aria-selected', 'false');
@@ -252,7 +257,7 @@ export function select(
     }
 
     function unSelectAll() {
-      const arr = storage.selectedItems;
+      const arr = storage.select.selectedItems;
       for (const it of [...arr]) {
         it.el.setAttribute('aria-selected', 'false');
         callEvent('unSelect', it.el);
@@ -261,7 +266,7 @@ export function select(
     }
 
     function getSelectedValues() {
-      return storage.selectedItems.map((s) => s.dataItem).filter(Boolean) as DataItem[];
+      return storage.select.selectedItems.map((s) => s.dataItem).filter(Boolean) as DataItem[];
     }
 
     // return สุดท้าย

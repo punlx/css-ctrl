@@ -1,158 +1,207 @@
-// src/plugin/dialog.ts
+// src/plugin/types.ts
 
-import { CssCtrlPlugin } from './types';
-
-// ----- Type ของ options ที่ plugin รับ -----
-interface DialogPluginOptions {
-  // React Node ที่จะ render ลง <dialog>
-  modal: any;
+// Callback สำหรับ dialog
+export interface DialogCallbackInfo {
+  open: boolean;
 }
 
-// ----- Plugin Function -----
-export function dialog(options: DialogPluginOptions): CssCtrlPlugin<{
-  dialog: {
-    willShowModal: () => void;
-    showModal: () => void;
-    didShowModal: () => void;
-    closeModal: () => void;
-    willCloseModal: () => void;
-    didCloseModal: () => void;
-    modalData: (data: any) => void;
-    modalState: () => any;
-    modalACtion: () => void; // คง logic เดิมสะกดแบบเดิม
+export interface DialogEvents {
+  willShow?: (info: DialogCallbackInfo) => void;
+  show?: (info: DialogCallbackInfo) => void;
+  didShow?: (info: DialogCallbackInfo) => void;
+  willClose?: (info: DialogCallbackInfo) => void;
+  closed?: (info: DialogCallbackInfo) => void;
+  didClosed?: (info: DialogCallbackInfo) => void;
+}
+
+export interface DialogItems {
+  state?: { open: boolean };
+  dialog?: HTMLDialogElement | null;
+  root?: any; // React Root
+  modal?: any; // JSX/ReactNode
+}
+
+// เก็บทั้งหมดไว้ใน storage.dialog
+export interface DialogState {
+  dialogItems: DialogItems;
+  _events: DialogEvents;
+}
+
+// storage.plugin?: สมมติว่ามี react
+export interface PluginSet {
+  react?: {
+    createRoot?: (el: HTMLElement) => any;
   };
-}> {
-  const { modal } = options;
+  [key: string]: any;
+}
 
-  return (storage, className) => {
-    // ตรวจว่ามี storage.dialogItems หรือยัง
-    // ถ้ายังไม่มี => จะสร้างครั้งแรก
-    if (!(storage.dialogItems as any)) {
-      (storage.dialogItems as any) = {};
-      (storage.dialogItems as any).state = { open: false };
+/**
+ * DialogStorage: interface ของ storage ที่ใช้ใน plugin dialog
+ * (extend Record<string,unknown>) => TS ยอมให้มี property อื่นด้วย
+ */
+export interface DialogStorage extends Record<string, unknown> {
+  dialog: DialogState;
+  plugin?: PluginSet;
+}
+
+/**
+ * dialog plugin จะคืน API
+ */
+export interface DialogPluginOptions {
+  fadeDuration: number;
+  backdropCloseable: boolean;
+  scroll: 'body' | 'dialog';
+}
+
+export interface DialogAPI {
+  dialog: {
+    action: {
+      show: () => void;
+      close: () => void;
+      getState: () => { open: boolean };
+    };
+    events: (e: DialogEvents) => void;
+    init: (o: { modal: any }) => void;
+  };
+}
+
+/**
+ * สุดท้าย CssCtrlPlugin<T>
+ * สมมติว่า = (storage: DialogStorage, className: string) => T
+ */
+export type CssCtrlPlugin<T> = (storage: DialogStorage, className: string) => T;
+
+// src/plugin/dialog.ts
+
+export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
+  const { backdropCloseable, fadeDuration, scroll } = options;
+
+  // ปลั๊กอิน: (storage: DialogStorage, className: string) => DialogAPI
+  return (storage: DialogStorage, className: string) => {
+    // ถ้าไม่มี storage.dialog => สร้าง
+    if (!storage.dialog) {
+      storage.dialog = {
+        dialogItems: {},
+        _events: {},
+      };
+    }
+    // หากไม่มี dialogItems => สร้าง
+    if (!storage.dialog.dialogItems) {
+      storage.dialog.dialogItems = {};
+    }
+    // หากไม่มี _events => สร้าง
+    if (!storage.dialog._events) {
+      storage.dialog._events = {};
     }
 
-    // แยกเมธอดย่อย
-    function willShowModal() {
-      // ยังไม่ทำอะไรเป็นพิเศษ
+    // =========== Utility ============
+    function getState(): { open: boolean } {
+      return storage.dialog.dialogItems.state || { open: false };
     }
-
-    function didShowModal() {
-      // ยังไม่ทำอะไรเป็นพิเศษ
-    }
-
-    function willCloseModal() {
-      // ยังไม่ทำอะไรเป็นพิเศษ
-    }
-
-    function didCloseModal() {
-      // ยังไม่ทำอะไรเป็นพิเศษ
-    }
-
-    function modalACtion() {
-      // ตามโค้ดเดิม ยังเป็น placeholder
-    }
-
-    function modalState() {
-      return (storage.dialogItems as any).state;
-    }
-
-    function modalData(data: any) {
-      const dialogItems = storage.dialogItems as any;
-      dialogItems.data = data;
-
-      // ถ้ามี root อยู่แล้ว → render ใหม่เลย
-      if (dialogItems.root) {
-        dialogItems.root.render(modal(dialogItems.data));
+    function callEvent(name: keyof DialogEvents) {
+      const cb = storage.dialog._events[name];
+      if (cb) {
+        cb(getState());
       }
     }
 
-    function showModal() {
-      // เรียก willShowModal ก่อน
-      willShowModal();
+    // =========== Action ============
+    function show() {
+      callEvent('willShow');
 
-      // ถ้ามี dialog แล้ว => ไม่ต้องสร้างซ้ำ
-      if ((storage.dialogItems as any).dialog) {
-        throw new Error(`ให้บอกว่า ไม่สามารถ เรียกตัวเอกได้`);
+      // ถ้ามี dialog อยู่แล้ว => error
+      if (storage.dialog.dialogItems.dialog) {
+        throw new Error(`[dialog plugin] already open`);
       }
 
-      // 1) สร้าง <dialog> + ใส่คลาส
+      // 1) สร้าง <dialog>
       const dialogEl = document.createElement('dialog');
       dialogEl.classList.add(className);
       document.body.appendChild(dialogEl);
 
-      // 2) สร้าง react root => render(options.render) ลงไป
-      const root = (storage.plugin as any).react.createRoot(dialogEl);
-      root.render(modal((storage.dialogItems as any).data));
+      // 2) ถ้ามี react => render modal
+      const root = storage.plugin?.react?.createRoot
+        ? storage.plugin.react.createRoot(dialogEl)
+        : null;
+      if (root) {
+        root.render(storage.dialog.dialogItems.modal);
+      }
 
-      // 3) เก็บอ้างอิงใน (storage.dialogItems as any)
-      (storage.dialogItems as any).dialog = dialogEl;
-      (storage.dialogItems as any).root = root;
+      // 3) เก็บอ้างอิง
+      storage.dialog.dialogItems.dialog = dialogEl;
+      storage.dialog.dialogItems.root = root;
+      storage.dialog.dialogItems.state = { open: true };
 
-      // 4) showModal => เปิด dialog
-      (storage.dialogItems as any).state = { open: true };
+      callEvent('show');
       (dialogEl as HTMLDialogElement).showModal();
-
-      // เรียก didShowModal หลังเปิด
-      didShowModal();
+      callEvent('didShow');
     }
 
-    function closeModal() {
-      // เรียก willCloseModal ก่อน
-      willCloseModal();
+    function close() {
+      callEvent('willClose');
+      if (!storage.dialog.dialogItems.dialog) return;
 
-      // ถ้าไม่มี dialog => ไม่ต้องทำอะไร
-      if (!(storage.dialogItems as any).dialog) return;
-
-      const dialogEl = (storage.dialogItems as any).dialog as HTMLDialogElement;
-
-      // ใส่ fade-out class เพื่อเล่น animation
+      const dialogEl = storage.dialog.dialogItems.dialog;
       dialogEl.classList.add('fade-out');
 
-      // รอ 1 frame => event animationend
       requestAnimationFrame(() => {
         dialogEl.addEventListener(
           'animationend',
           () => {
-            // 1) เอา fade-out ออก
             dialogEl.classList.remove('fade-out');
-            // 2) ปิด dialog
             dialogEl.close();
-            (storage.dialogItems as any).state = { open: false };
+            storage.dialog.dialogItems.state = { open: false };
+            callEvent('closed');
 
-            // 3) unmount React เพื่อเคลียร์ state
-            if ((storage.dialogItems as any).root) {
-              ((storage.dialogItems as any).root as any).unmount();
-              (storage.dialogItems as any).root = null;
+            // unmount react
+            if (storage.dialog.dialogItems.root) {
+              storage.dialog.dialogItems.root.unmount?.();
+              storage.dialog.dialogItems.root = null;
             }
 
-            // 4) เอา <dialog> ออกจาก DOM
             if (dialogEl.parentNode) {
               dialogEl.parentNode.removeChild(dialogEl);
             }
+            storage.dialog.dialogItems.dialog = null;
 
-            // 5) เคลียร์ตัวแปรใน (storage.dialogItems as any)
-            (storage.dialogItems as any).dialog = null;
-
-            // เรียก didCloseModal หลังปิด
-            didCloseModal();
+            callEvent('didClosed');
           },
           { once: true }
         );
       });
     }
 
+    // =========== init(...) ============
+    function init(o: { modal: any }) {
+      storage.dialog.dialogItems.modal = o.modal;
+      // ถ้าเคยเปิดอยู่ => render ใหม่
+      if (storage.dialog.dialogItems.root && getState().open) {
+        storage.dialog.dialogItems.root.render(storage.dialog.dialogItems.modal);
+      }
+    }
+
+    // =========== events(...) ============
+    function events(e: DialogEvents) {
+      storage.dialog._events = {
+        willShow: e.willShow,
+        show: e.show,
+        didShow: e.didShow,
+        willClose: e.willClose,
+        closed: e.closed,
+        didClosed: e.didClosed,
+      };
+    }
+
+    // =========== Return ============
     return {
       dialog: {
-        willShowModal,
-        showModal,
-        didShowModal,
-        closeModal,
-        willCloseModal,
-        didCloseModal,
-        modalData,
-        modalState,
-        modalACtion,
+        action: {
+          show,
+          close,
+          getState,
+        },
+        init,
+        events,
       },
     };
   };
