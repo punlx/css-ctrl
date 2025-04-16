@@ -51,6 +51,7 @@ export interface DialogPluginOptions {
   fadeDuration: number;
   backdropCloseable: boolean;
   scroll: 'body' | 'dialog';
+  modal: any;
 }
 
 export interface DialogAPI {
@@ -61,7 +62,6 @@ export interface DialogAPI {
       getState: () => { open: boolean };
     };
     events: (e: DialogEvents) => void;
-    init: (o: { modal: any }) => void;
   };
 }
 
@@ -74,7 +74,7 @@ export type CssCtrlPlugin<T> = (storage: DialogStorage, className: string) => T;
 // src/plugin/dialog.ts
 
 export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
-  const { backdropCloseable, fadeDuration, scroll } = options;
+  const { modal } = options;
 
   // ปลั๊กอิน: (storage: DialogStorage, className: string) => DialogAPI
   return (storage: DialogStorage, className: string) => {
@@ -124,7 +124,10 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
         ? storage.plugin.react.createRoot(dialogEl)
         : null;
       if (root) {
-        root.render(storage.dialog.dialogItems.modal);
+        root.render(modal);
+      } else {
+        throw new Error(`[CSS-CTRL-ERR] 
+Please config theme.plugin by passing createRoot to enable dialog plugin for react.`);
       }
 
       // 3) เก็บอ้างอิง
@@ -171,15 +174,6 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
       });
     }
 
-    // =========== init(...) ============
-    function init(o: { modal: any }) {
-      storage.dialog.dialogItems.modal = o.modal;
-      // ถ้าเคยเปิดอยู่ => render ใหม่
-      if (storage.dialog.dialogItems.root && getState().open) {
-        storage.dialog.dialogItems.root.render(storage.dialog.dialogItems.modal);
-      }
-    }
-
     // =========== events(...) ============
     function events(e: DialogEvents) {
       storage.dialog._events = {
@@ -200,7 +194,6 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
           close,
           getState,
         },
-        init,
         events,
       },
     };
