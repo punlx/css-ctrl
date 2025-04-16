@@ -1,7 +1,4 @@
-## แก้ไข logic การ hash ต่อไปนี้ใช้แค่ class name + scope + $variable name + val / --&localVar name + val ก็พอแล้ว
 
-ฉันขอสอบถามเพิ่มเติมหน่อยว่า เราควรมี @scope hash ไหม ในเมื่อเรามี @scope <scope-name> ไว้แล้ว
-คืออันนี้ที่ถามก่อนเพราะ
 
 -- theme.class`
 .. สร้าง global class name พร้อมใช้กับ @bind ได้ทุกที่
@@ -15,24 +12,37 @@ bg[red]
 `
 
 ---
+
 ถ้ามีการกำหนด theme.plugin({
-    react: {createRoot}
+react: {createRoot}
 })
 
 ให้ generate css แบบนั้นใน css-ctrl.theme.css ด้วย
+
 ```css
-:root {
-  --fadePlguinduration: 3000ms;
+dialog:-internal-dialog-in-top-layer {
+  max-width: 100%;
+  max-height: var(--dialogInternalPluginMaxHeight);
+}
+
+dialog {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  width: var(--dialogPluginWidth);
+  background-color: transparent;
+  border-style: none;
+  padding: 0;
 }
 
 dialog[open] {
   opacity: 0;
-  transform: scale(0.9);
-  animation: dialogPluginFadeIn var(--fadePlguinduration) ease-out forwards;
+  transform: var(--dialogPluginFadeScale);
+  animation: dialogPluginFadeIn var(--dialogPluginFadeDuration) ease-out forwards;
 }
 
-dialog.fade-out {
-  animation: dialogPluginFadeOut var(--fadePlguinduration) ease-in forwards;
+dialog.dialogPluginFadeOutClass {
+  animation: dialogPluginFadeOut var(--dialogPluginFadeDuration) ease-in forwards;
 }
 
 @keyframes dialogPluginFadeIn {
@@ -49,33 +59,86 @@ dialog.fade-out {
   }
   to {
     opacity: 0;
-    transform: scale(0.9);
+    transform: var(--dialogPluginFadeScale);
   }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e1e1e; /* สีพื้นหลังของ scrollbar track */
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #555; /* สีของแท่ง scrollbar */
+  border-radius: 4px;
+  border: 2px solid #1e1e1e; /* ขอบให้เข้ากับ track */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #777;
 }
 
 dialog[open]::backdrop {
-  animation: fadeBackdropIn var(--fadePlguinduration) ease-out forwards;
+  animation: dialogPluginFadeBackdropIn var(--dialogPluginFadeDuration) ease-out forwards;
 }
 
-dialog.fade-out::backdrop {
-  animation: fadeBackdropOut var(--fadePlguinduration) ease-in forwards;
+dialog.dialogPluginFadeOutClass::backdrop {
+  animation: dialogPluginFadeBackdropOut var(--dialogPluginFadeDuration) ease-in forwards;
 }
 
-@keyframes fadeBackdropIn {
+@keyframes dialogPluginFadeBackdropIn {
   from {
     background-color: rgba(0, 0, 0, 0);
   }
   to {
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--dialogPluginBackdropColor);
   }
 }
 
-@keyframes fadeBackdropOut {
+@keyframes dialogPluginFadeBackdropOut {
   from {
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--dialogPluginBackdropColor);
   }
   to {
     background-color: rgba(0, 0, 0, 0);
   }
+}
+```
+
+---
+
+```css
+.box {
+  <parent div { <-- ใช้ได้ภายใต้ .box เท่านั้นไม่สามารถใช้ได้ใน @query
+  }
+
+  -- > จะได้ div:has(.app_box) {
+    ...
+  }
+
+  >sibling div { <-- ใช้ได้ภายใต้ .box เท่านั้นไม่สามารถใช้ได้ใน @query
+  }
+
+  -- > จะได้ .app_box + div {
+    ...
+  }
+}
+```
+
+---
+
+```css
+@keyframe move {
+  0%(bg[red])
+  50%(bg[red])
+  100%(bg[red])
+}
+
+.box {
+  am[<-- suggestion move]
 }
 ```

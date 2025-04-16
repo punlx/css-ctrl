@@ -2,6 +2,15 @@
 const DIALOG_PLUGIN_FADE_DURATION = 'dialogPluginFadeDuration';
 const DIALOG_PLUGIN_BACKDROP_COLOR = 'dialogPluginBackdropColor';
 const DIALOG_PLUGIN_Fade_SCALE = 'dialogPluginFadeScale';
+const DIALOG_PLUGIN_OVERFLOW = 'dialogPluginOverflow';
+const getDialogInternalPLuginMaxHeight = (scroll: 'body' | 'modal') =>
+  scroll === 'body' ? '100%' : 'calc(100% - 6em)';
+const DIALOG_INTERNAL_PLUGIN_MAX_HEIGHT = 'dialogInternalPluginMaxHeight';
+const DIALOG_PLUGIN_WIDTH = 'dialogPluginWidth';
+
+const getDialogPluginWidth = (scroll: 'body' | 'modal') =>
+  scroll === 'body' ? '100%' : 'fit-content';
+
 // Callback สำหรับ dialog
 export interface DialogCallbackInfo {
   open: boolean;
@@ -54,7 +63,7 @@ export interface DialogPluginOptions {
   fadeDuration?: number;
   fadeScale?: number;
   backdropCloseable?: boolean;
-  scroll?: 'body' | 'dialog';
+  scroll?: 'body' | 'modal';
   backdropColor?: string;
 }
 
@@ -82,12 +91,11 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
     modal,
     backdropCloseable = false,
     fadeDuration = 300,
-    scroll = 'dialog',
+    scroll = 'body',
     backdropColor = '#00000080',
     fadeScale = 0.9,
   } = options;
 
-  // ปลั๊กอิน: (storage: DialogStorage, className: string) => DialogAPI
   return (storage: DialogStorage, className: string) => {
     // ถ้าไม่มี storage.dialog => สร้าง
     if (!storage.dialog) {
@@ -106,9 +114,11 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
     }
 
     // =========== Utility ============
+
     function getState(): { open: boolean } {
       return storage.dialog.dialogItems.state || { open: false };
     }
+
     function callEvent(name: keyof DialogEvents) {
       const cb = storage.dialog._events[name];
       if (cb) {
@@ -116,7 +126,16 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
       }
     }
 
+    // Listener: ถ้าคลิกบน backdrop => close
+    function onBackdropClick(e: MouseEvent) {
+      // ถ้า user คลิกบนตัว dialogEl เอง (ไม่ใช่ลูกภายใน)
+      if (e.target === e.currentTarget) {
+        close();
+      }
+    }
+
     // =========== Action ============
+
     function show() {
       callEvent('willShow');
 
@@ -127,23 +146,50 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
 
       // 1) สร้าง <dialog>
       const dialogEl = document.createElement('dialog');
-      // set styles
-      dialogEl.style.setProperty(`--${DIALOG_PLUGIN_FADE_DURATION}`, `${fadeDuration}ms`);
-      dialogEl.style.setProperty(`--${DIALOG_PLUGIN_BACKDROP_COLOR}`, backdropColor);
-      dialogEl.style.setProperty(`--${DIALOG_PLUGIN_Fade_SCALE}`, `scale(${fadeScale})`);
+      document.documentElement.style.setProperty(`--${DIALOG_PLUGIN_OVERFLOW}`, `hidden`);
+      document.documentElement.style.setProperty(
+        `--${DIALOG_PLUGIN_FADE_DURATION}`,
+        `${fadeDuration}ms`
+      );
+      document.documentElement.style.setProperty(
+        `--${DIALOG_PLUGIN_BACKDROP_COLOR}`,
+        backdropColor
+      );
+      document.documentElement.style.setProperty(
+        `--${DIALOG_PLUGIN_Fade_SCALE}`,
+        `scale(${fadeScale})`
+      );
 
-      dialogEl.classList.add(className);
+      document.documentElement.style.setProperty(
+        `--${DIALOG_INTERNAL_PLUGIN_MAX_HEIGHT}`,
+        `${getDialogInternalPLuginMaxHeight(scroll)}`
+      );
+
+      document.documentElement.style.setProperty(
+        `--${DIALOG_PLUGIN_WIDTH}`,
+        `${getDialogPluginWidth(scroll)}`
+      );
+
       document.body.appendChild(dialogEl);
 
-      // 2) ถ้ามี react => render modal
-      const root = storage.plugin?.react?.createRoot
-        ? storage.plugin.react.createRoot(dialogEl)
-        : null;
-      if (root) {
-        root.render(modal);
-      } else {
-        throw new Error(`[CSS-CTRL-ERR] 
-Please config theme.plugin by passing createRoot to enable dialog plugin for react.`);
+      // 1.1) สร้าง child container
+      const contentDiv = document.createElement('div');
+      // contentDiv.classList.add(className);
+
+      dialogEl.appendChild(contentDiv);
+
+      if (!storage.plugin?.react?.createRoot) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Please config theme.plugin by passing createRoot to enable dialog plugin for react.`
+        );
+      }
+      // 2) ถ้ามี react => render(modal) ลงใน contentDiv
+      const root = storage.plugin.react.createRoot(contentDiv);
+      root.render(modal);
+
+      // ถ้า backdropCloseable => ผูก event click => onBackdropClick
+      if (backdropCloseable) {
+        dialogEl.addEventListener('click', onBackdropClick);
       }
 
       // 3) เก็บอ้างอิง
@@ -161,13 +207,18 @@ Please config theme.plugin by passing createRoot to enable dialog plugin for rea
       if (!storage.dialog.dialogItems.dialog) return;
 
       const dialogEl = storage.dialog.dialogItems.dialog;
-      dialogEl.classList.add('fade-out');
 
+      // ลบ listener ถ้ามี
+      if (backdropCloseable) {
+        dialogEl.removeEventListener('click', onBackdropClick);
+      }
+
+      dialogEl.classList.add('dialogPluginFadeOutClass');
       requestAnimationFrame(() => {
         dialogEl.addEventListener(
           'animationend',
           () => {
-            dialogEl.classList.remove('fade-out');
+            dialogEl.classList.remove('dialogPluginFadeOutClass');
             dialogEl.close();
             storage.dialog.dialogItems.state = { open: false };
             callEvent('closed');
@@ -178,6 +229,7 @@ Please config theme.plugin by passing createRoot to enable dialog plugin for rea
               storage.dialog.dialogItems.root = null;
             }
 
+            // เอา <dialog> ออกจาก DOM
             if (dialogEl.parentNode) {
               dialogEl.parentNode.removeChild(dialogEl);
             }
@@ -191,6 +243,7 @@ Please config theme.plugin by passing createRoot to enable dialog plugin for rea
     }
 
     // =========== events(...) ============
+
     function events(e: DialogEvents) {
       storage.dialog._events = {
         willShow: e.willShow,
@@ -203,6 +256,7 @@ Please config theme.plugin by passing createRoot to enable dialog plugin for rea
     }
 
     // =========== Return ============
+
     return {
       dialog: {
         action: {
