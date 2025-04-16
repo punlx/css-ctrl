@@ -4,8 +4,6 @@ import { CssCtrlPlugin } from './types'; // สมมติว่า CssCtrlPlug
 
 /** โครงสร้างข้อมูลสำหรับ DataItem */
 interface DataItem {
-  value: string;
-  display?: string;
   [key: string]: any;
 }
 
@@ -40,7 +38,7 @@ interface SelectEvents {
 /** ข้อมูลสำหรับ init(...) */
 interface InitParams {
   ref: HTMLElement; // container <div role="listbox" class=...>
-  data: DataItem[]; // array ของ { value, display, ... }
+  data?: DataItem[]; // array ของ { value, display, ... }
 }
 
 /** interface ของ storage ที่ plugin จะใช้ */
@@ -221,7 +219,9 @@ export function select(
         `[role="option"][data-value="${val}"]`
       ) as HTMLElement | null;
       if (!el) {
-        throw new Error(`[CSS-CTRL-ERR] selectByItem: no data-value="${val}" found`);
+        throw new Error(
+          `[CSS-CTRL-ERR] selectByItem: no data-value="${val}" or role="option" found`
+        );
       }
       if (el.getAttribute('aria-disabled') === 'true') {
         // ถ้าเป็น disabled => ข้ามเลย ไม่ทำงานอะไร
@@ -235,15 +235,12 @@ export function select(
       const container = storage.select.containerEl;
       if (!container) {
         throw new Error(`[CSS-CTRL-ERR] unSelectByItem: no containerEl`);
-
-        return;
       }
       const el = container.querySelector(
         `[role="option"][data-value="${val}"]`
       ) as HTMLElement | null;
       if (!el) {
-        throw new Error(`[CSS-CTRL-ERR] unSelectByItem: no data-value="${val}"`);
-        return;
+        throw new Error(`[CSS-CTRL-ERR] unSelectByItem: no data-value="${val}" or role="option".`);
       }
 
       // ลบของจริง
