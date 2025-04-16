@@ -62,6 +62,7 @@ export function select(
   options: SelectOptions = { clearPrevious: true, toggleable: false }
 ): CssCtrlPlugin<{
   select: {
+    // เปลี่ยนชื่อ method จาก init => listbox
     listbox: (params: InitParams) => void;
     events: (ev: SelectEvents) => void;
     actions: {
@@ -95,16 +96,36 @@ export function select(
     // 1) init(...)
     function listbox(params: InitParams) {
       const { ref, data } = params;
+
       // ตรวจว่า element ตรงตาม [role="listbox"] + className
       if (ref.getAttribute('role') !== 'listbox' || !ref.classList.contains(className)) {
         throw new Error(
           `[CSS-CTRL-ERR] init: element must be <div role="listbox" class="${className}">`
         );
-        return;
       }
+
       // เก็บ container + data
       storage.select.containerEl = ref;
       storage.select._selectData = data;
+
+      // =========== จุดสำคัญ: เช็ค role="option" ===========
+      if (data) {
+        const el = ref.querySelector(`[data-value]`) as HTMLElement | null;
+        if (!el) {
+          throw new Error(
+            `[CSS-CTRL-ERR] Missing [data-value="..."] in container with role="listbox" despite select.listbox({ data }) configuration.`
+          );
+        }
+      }
+      const el = ref.querySelector(`[role="option"]`);
+      if (!el) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Each item within a container assigned role="listbox" must include role="option".`
+        );
+      }
+
+      // ====== end check =====
+
       // ผูก event click
       ref.onclick = handleContainerClick;
     }
@@ -208,7 +229,7 @@ export function select(
       callEvent('didSelect', el);
     }
 
-    // actions
+    // =========== actions ===========
 
     function selectByItem(val: string) {
       const container = storage.select.containerEl;
