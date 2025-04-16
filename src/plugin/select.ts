@@ -39,7 +39,7 @@ interface SelectEvents {
 
 /** ข้อมูลสำหรับ init(...) */
 interface InitParams {
-  element: HTMLElement; // container <div role="listbox" class=...>
+  ref: HTMLElement; // container <div role="listbox" class=...>
   data: DataItem[]; // array ของ { value, display, ... }
 }
 
@@ -64,7 +64,7 @@ export function select(
   options: SelectOptions = { clearPrevious: true, toggleable: false }
 ): CssCtrlPlugin<{
   select: {
-    init: (params: InitParams) => void;
+    listbox: (params: InitParams) => void;
     events: (ev: SelectEvents) => void;
     actions: {
       selectByItem: (val: string) => void;
@@ -95,20 +95,20 @@ export function select(
     storage.select.unselectAllowed = false;
 
     // 1) init(...)
-    function init(params: InitParams) {
-      const { element, data } = params;
+    function listbox(params: InitParams) {
+      const { ref, data } = params;
       // ตรวจว่า element ตรงตาม [role="listbox"] + className
-      if (element.getAttribute('role') !== 'listbox' || !element.classList.contains(className)) {
+      if (ref.getAttribute('role') !== 'listbox' || !ref.classList.contains(className)) {
         throw new Error(
           `[CSS-CTRL-ERR] init: element must be <div role="listbox" class="${className}">`
         );
         return;
       }
       // เก็บ container + data
-      storage.select.containerEl = element;
+      storage.select.containerEl = ref;
       storage.select._selectData = data;
       // ผูก event click
-      element.onclick = handleContainerClick;
+      ref.onclick = handleContainerClick;
     }
 
     // 2) events(...)
@@ -272,7 +272,7 @@ export function select(
     // return สุดท้าย
     return {
       select: {
-        init,
+        listbox,
         events,
         actions: {
           selectByItem,
