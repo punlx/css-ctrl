@@ -1,5 +1,7 @@
 // src/plugin/types.ts
-
+const DIALOG_PLUGIN_FADE_DURATION = 'dialogPluginFadeDuration';
+const DIALOG_PLUGIN_BACKDROP_COLOR = 'dialogPluginBackdropColor';
+const DIALOG_PLUGIN_Fade_SCALE = 'dialogPluginFadeScale';
 // Callback สำหรับ dialog
 export interface DialogCallbackInfo {
   open: boolean;
@@ -48,10 +50,12 @@ export interface DialogStorage extends Record<string, unknown> {
  * dialog plugin จะคืน API
  */
 export interface DialogPluginOptions {
-  fadeDuration: number;
-  backdropCloseable: boolean;
-  scroll: 'body' | 'dialog';
   modal: any;
+  fadeDuration?: number;
+  fadeScale?: number;
+  backdropCloseable?: boolean;
+  scroll?: 'body' | 'dialog';
+  backdropColor?: string;
 }
 
 export interface DialogAPI {
@@ -74,7 +78,14 @@ export type CssCtrlPlugin<T> = (storage: DialogStorage, className: string) => T;
 // src/plugin/dialog.ts
 
 export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
-  const { modal } = options;
+  const {
+    modal,
+    backdropCloseable = false,
+    fadeDuration = 300,
+    scroll = 'dialog',
+    backdropColor = '#00000080',
+    fadeScale = 0.9,
+  } = options;
 
   // ปลั๊กอิน: (storage: DialogStorage, className: string) => DialogAPI
   return (storage: DialogStorage, className: string) => {
@@ -116,6 +127,11 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
 
       // 1) สร้าง <dialog>
       const dialogEl = document.createElement('dialog');
+      // set styles
+      dialogEl.style.setProperty(`--${DIALOG_PLUGIN_FADE_DURATION}`, `${fadeDuration}ms`);
+      dialogEl.style.setProperty(`--${DIALOG_PLUGIN_BACKDROP_COLOR}`, backdropColor);
+      dialogEl.style.setProperty(`--${DIALOG_PLUGIN_Fade_SCALE}`, `scale(${fadeScale})`);
+
       dialogEl.classList.add(className);
       document.body.appendChild(dialogEl);
 
