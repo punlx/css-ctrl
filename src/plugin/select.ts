@@ -39,6 +39,7 @@ interface SelectEvents {
 interface InitParams {
   ref: HTMLElement; // container <div role="listbox" class=...>
   data?: DataItem[]; // array ของ { value, display, ... }
+  valueKey?: string;
 }
 
 /** interface ของ storage ที่ plugin จะใช้ */
@@ -48,7 +49,7 @@ export interface SelectStorage extends Record<string, unknown> {
     _events: SelectEvents;
     reselectAllowed: boolean;
     unselectAllowed: boolean;
-
+    valueKey?: string;
     containerEl?: HTMLElement;
     _selectData?: DataItem[];
   };
@@ -88,14 +89,16 @@ export function select(
     if (!storage.select._events) {
       storage.select._events = {};
     }
-
+    if (!storage.select.valueKey) {
+      storage.select.valueKey = undefined;
+    }
     // ตั้งค่าเริ่มต้นให้ reselectAllowed / unselectAllowed เป็น false
     storage.select.reselectAllowed = false;
     storage.select.unselectAllowed = false;
 
     // 1) init(...)
     function listbox(params: InitParams) {
-      const { ref, data } = params;
+      const { ref, data, valueKey } = params;
 
       // ตรวจว่า element ตรงตาม [role="listbox"] + className
       if (ref.getAttribute('role') !== 'listbox' || !ref.classList.contains(className)) {
@@ -115,6 +118,14 @@ export function select(
           throw new Error(
             `[CSS-CTRL-ERR] Missing [data-value="..."] in container with role="listbox" despite select.listbox({ data }) configuration.`
           );
+        }
+
+        if (!valueKey) {
+          throw new Error(
+            `[CSS-CTRL-ERR] select.listbox({ valueKey }) is required when using select.listbox({ data }) in a container with role="listbox".`
+          );
+        } else {
+          storage.select.valueKey = valueKey;
         }
       }
       const el = ref.querySelector(`[role="option"]`);
@@ -155,12 +166,56 @@ export function select(
       doSelectLogic(el);
     }
 
+    // ฟังก์ชันช่วยสำหรับ wildcard/path
+    function extractValueByPath(obj: any, pathStr: string): any {
+      const segments = pathStr.split('.');
+      let current = obj;
+      for (const seg of segments) {
+        if (seg === '$') {
+          const keys = Object.keys(current);
+          if (keys.length !== 1) {
+            throw new Error(
+              `[CSS-CTRL-ERR] wildcard "$" expects exactly 1 key, got ${keys.length}`
+            );
+          }
+          const theKey = keys[0];
+          current = current[theKey];
+        } else {
+          if (current == null) break;
+          current = current[seg];
+        }
+        if (current === undefined || current === null) break;
+      }
+      return current;
+    }
+
     // ดึง dataItem จาก element
     function findDataItem(el: HTMLElement): DataItem | null {
       const data = storage.select._selectData || [];
       const val = el.dataset.value;
       if (!val) return null;
-      return data.find((d) => String(d.value) === val) || null;
+
+      // ถ้า user ไม่กำหนด valueKey => throw error
+      if (!storage.select.valueKey) {
+        throw new Error(
+          `[CSS-CTRL-ERR] No valueKey specified, can't parse data item for data-value="${val}".`
+        );
+      }
+
+      // loop หา item ที่ extractValueByPath(...) === val
+      for (const item of data) {
+        const extracted = extractValueByPath(item, storage.select.valueKey);
+        if (extracted === undefined || extracted === null) {
+          continue;
+        }
+        if (String(extracted) === val) {
+          return item;
+        }
+      }
+      // ถ้าไม่เจอ item ไหน match => โยน error
+      throw new Error(
+        `[CSS-CTRL-ERR] No matched data item for data-value="${val}" using valueKey="${storage.select.valueKey}".`
+      );
     }
 
     // สร้าง info สำหรับ callback
