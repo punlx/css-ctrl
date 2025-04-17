@@ -65,6 +65,8 @@ export interface DialogPluginOptions {
   backdropCloseable?: boolean;
   scroll?: 'body' | 'modal';
   backdropColor?: string;
+  labelledby?: string;
+  describedby?: string;
 }
 
 export interface DialogAPI {
@@ -94,6 +96,8 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
     scroll = 'body',
     backdropColor = '#00000080',
     fadeScale = 0.9,
+    describedby,
+    labelledby,
   } = options;
 
   return (storage: DialogStorage, className: string) => {
@@ -146,6 +150,19 @@ export function dialog(options: DialogPluginOptions): CssCtrlPlugin<DialogAPI> {
 
       // 1) สร้าง <dialog>
       const dialogEl = document.createElement('dialog');
+
+      // set attribute สำหรับ dialog
+      dialogEl.role = 'dialog';
+      dialogEl.ariaModal = 'true';
+
+      if (describedby) {
+        dialogEl.setAttribute('aria-describedby', describedby);
+      }
+
+      if (labelledby) {
+        dialogEl.setAttribute('aria-labelledby', labelledby);
+      }
+
       document.documentElement.style.setProperty(`--${DIALOG_PLUGIN_OVERFLOW}`, `hidden`);
       document.documentElement.style.setProperty(
         `--${DIALOG_PLUGIN_FADE_DURATION}`,
