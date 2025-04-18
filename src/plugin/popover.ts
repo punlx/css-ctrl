@@ -1,4 +1,6 @@
-import { CssCtrlPlugin } from './dialog';
+// src/plugin/popover.ts
+
+import { createPortal } from 'react-dom';
 
 export interface PopoverEvents {
   willShow?: (info: { open: boolean }) => void;
@@ -102,8 +104,6 @@ export interface PopoverProperty {
   toggleAriaExpanded?: boolean;
 
   excluded?: string[];
-
-  // ===== เพิ่ม property zIndex?: number => กำหนด z-index ของ container
   zIndex?: number;
 }
 
@@ -124,21 +124,18 @@ function computeAnchorAndTransform(
   offsetX: number,
   offsetY: number
 ) {
-  // กำหนด default
   const aoV = anchorOrigin.vertical ?? 'bottom';
   const aoH = anchorOrigin.horizontal ?? 'left';
 
   const toV = transformOrigin.vertical ?? 'top';
   const toH = transformOrigin.horizontal ?? 'left';
 
-  // 1) anchor point
   let yA = 0;
   if (aoV === 'top') {
     yA = triggerRect.top;
   } else if (aoV === 'center') {
     yA = (triggerRect.top + triggerRect.bottom) / 2;
   } else {
-    // bottom
     yA = triggerRect.bottom;
   }
 
@@ -151,14 +148,12 @@ function computeAnchorAndTransform(
     xA = triggerRect.right;
   }
 
-  // 2) transform point
   const w = popRect.width;
   const h = popRect.height;
 
   const tv = toV === 'top' ? 0 : toV === 'center' ? h / 2 : h;
   const th = toH === 'left' ? 0 : toH === 'center' ? w / 2 : w;
 
-  // 3) position
   const left = xA - th + offsetX;
   const top = yA - tv + offsetY;
 
@@ -238,7 +233,6 @@ function positionPopoverAutoFlip(
 ) {
   containerEl.style.position = strategy || 'absolute';
 
-  // ตัวฟังก์ชันนี้ return void - flip logic
   function doPosition(
     aOri: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' },
     tOri: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' }
@@ -262,13 +256,11 @@ function positionPopoverAutoFlip(
     return containerEl.getBoundingClientRect();
   }
 
-  // 1) วางครั้งแรก
   let rect = doPosition(anchorOrigin, transformOrigin);
   if (!flip) return;
 
   if (!isOutOfViewport(rect)) return;
 
-  // 2) flip center horizontal/vertical
   let { anchorOrigin: a2, transformOrigin: t2 } = flipCenterHorizontal(
     anchorOrigin,
     transformOrigin,
@@ -278,7 +270,6 @@ function positionPopoverAutoFlip(
   rect = doPosition(a2, t2);
   if (!isOutOfViewport(rect)) return;
 
-  // 3) flip standard top<->bottom / left<->right
   rect = doFlipStandard(a2, t2);
 
   function doFlipStandard(
@@ -288,7 +279,6 @@ function positionPopoverAutoFlip(
     const aTmp = { ...aOri };
     const tTmp = { ...tOri };
 
-    // flip vertical
     if (rect.bottom > window.innerHeight && aTmp.vertical === 'bottom') {
       aTmp.vertical = 'top';
       if (tTmp.vertical === 'top') {
@@ -301,7 +291,6 @@ function positionPopoverAutoFlip(
       }
     }
 
-    // flip horizontal
     if (rect.right > window.innerWidth && aTmp.horizontal === 'right') {
       aTmp.horizontal = 'left';
       if (tTmp.horizontal === 'left') {
@@ -321,13 +310,25 @@ function positionPopoverAutoFlip(
 // ======================
 // ส่วนหลัก: popover(...)
 // ======================
-export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
+export function popover(options: PopoverProperty) {
+  // สร้าง dummy storage แบบที่โค้ดเดิมใช้
+  const storage: Record<string, any> = {};
+  if (!storage.popover) {
+    storage.popover = {} as PopoverState;
+  }
+  const popoverState = storage.popover as PopoverState;
+
+  if (!popoverState._events) {
+    popoverState._events = {};
+  }
+  popoverState.open = false;
+
+  // ===== ยก logic เหมือนใน pluginFn(...) เดิม
   const {
     id,
     close = 'close-action',
     trapFocus = true,
     initialFocus,
-
     anchorOrigin = { vertical: 'bottom', horizontal: 'left' },
     transformOrigin = { vertical: 'top', horizontal: 'left' },
     offsetX = 0,
@@ -336,260 +337,238 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
     repositionOnScroll = true,
     repositionOnResize = true,
     strategy = 'absolute',
-
-    // ARIA
     role = 'dialog',
     ariaLabel,
     ariaLabelledby,
     ariaDescribedby,
     toggleAriaExpanded = true,
-
     excluded,
-    zIndex, // ใหม่: zIndex?: number
+    zIndex,
   } = options;
 
-  return (storage: Record<string, any>) => {
-    if (!storage.popover) {
-      storage.popover = {} as PopoverState;
-    }
-    const popoverState = storage.popover as PopoverState;
-
-    if (!popoverState._events) {
-      popoverState._events = {};
-    }
-
-    popoverState.open = false;
-
-    const api: PopoverAPI = {
-      popover: {
-        panel(jsx: any) {
-          let container = document.getElementById(id);
-          if (!container) {
-            container = document.createElement('div');
-            container.id = id;
-            container.setAttribute('hidden', '');
-            container.setAttribute('role', role);
-            container.setAttribute('aria-modal', 'false');
-            if (ariaLabel) {
-              container.setAttribute('aria-label', ariaLabel);
-            }
-            if (ariaLabelledby) {
-              container.setAttribute('aria-labelledby', ariaLabelledby);
-            }
-            if (ariaDescribedby) {
-              container.setAttribute('aria-describedby', ariaDescribedby);
-            }
-
-            container.tabIndex = -1;
-            container.classList.add('popoverPlugin');
-            // ถ้ากำหนด zIndex => set style.zIndex
-            if (typeof zIndex === 'number') {
-              container.style.zIndex = String(zIndex);
-            }
-
-            document.body.appendChild(container);
+  // ===== สร้าง PopoverAPI ในรูปเดียวกับ plugin
+  const api: PopoverAPI = {
+    popover: {
+      panel(jsx: any) {
+        let container = document.getElementById(id);
+        if (!container) {
+          container = document.createElement('div');
+          container.id = id;
+          container.setAttribute('hidden', '');
+          container.setAttribute('role', role);
+          container.setAttribute('aria-modal', 'false');
+          if (ariaLabel) {
+            container.setAttribute('aria-label', ariaLabel);
+          }
+          if (ariaLabelledby) {
+            container.setAttribute('aria-labelledby', ariaLabelledby);
+          }
+          if (ariaDescribedby) {
+            container.setAttribute('aria-describedby', ariaDescribedby);
           }
 
-          popoverState.containerEl = container;
-
-          if (!storage.plugin?.react?.createPortal) {
-            throw new Error(
-              `[CSS-CTRL-ERR] theme.plugin({ react: {createPortal} }) must be set before using popover.`
-            );
+          container.tabIndex = -1;
+          container.classList.add('popoverPlugin');
+          if (typeof zIndex === 'number') {
+            container.style.zIndex = String(zIndex);
           }
-          return storage.plugin.react.createPortal(jsx, container);
-        },
+          document.body.appendChild(container);
+        }
 
-        events(handlers: PopoverEvents) {
-          popoverState._events = {
-            willShow: handlers.willShow,
-            show: handlers.show,
-            didShow: handlers.didShow,
-            willClose: handlers.willClose,
-            closed: handlers.closed,
-            didClosed: handlers.didClosed,
-          };
-        },
-
-        actions: {
-          show(e: any) {
-            if (popoverState.open) return;
-            popoverState.open = true;
-
-            const container = popoverState.containerEl;
-            if (!container) {
-              throw new Error(`[popover] containerEl not found.`);
-            }
-
-            popoverState._events?.willShow?.({ open: true });
-
-            popoverState.triggerEl = e?.currentTarget || e?.target || null;
-
-            container.hidden = false;
-            container.classList.remove('popoverPluginFadeOutClass');
-            container.classList.add('popoverPluginFadeInClass');
-
-            if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
-              popoverState.triggerEl.setAttribute('aria-expanded', 'true');
-              popoverState.triggerEl.setAttribute(
-                'aria-haspopup',
-                role === 'dialog' ? 'dialog' : 'menu'
-              );
-              popoverState.triggerEl.setAttribute('aria-controls', container.id);
-            }
-
-            if (close === 'outside-click') {
-              setTimeout(() => {
-                popoverState.outsideClickHandler = (evt: MouseEvent) => {
-                  if (!container?.contains(evt.target as Node)) {
-                    // check excluded popovers => if evt in any excluded => skip close
-                    if (excluded && Array.isArray(excluded) && excluded.length > 0) {
-                      const isInsideExcluded = excluded.some((exId) => {
-                        const exEl = document.getElementById(exId);
-                        return exEl?.contains(evt.target as Node);
-                      });
-                      if (isInsideExcluded) {
-                        return; // skip
-                      }
-                    }
-                    api.popover.actions.close(evt);
-                  }
-                };
-                document.addEventListener('click', popoverState.outsideClickHandler);
-              }, 0);
-            }
-
-            popoverState.keydownHandler = (evt: KeyboardEvent) => {
-              if (evt.key === 'Escape') {
-                api.popover.actions.close(evt);
-              }
-            };
-            document.addEventListener('keydown', popoverState.keydownHandler);
-
-            if (trapFocus) {
-              popoverState.focusTrapCleanup = enableFocusTrap(container);
-            }
-
-            if (popoverState.triggerEl instanceof HTMLElement) {
-              const reposition = () => {
-                positionPopoverAutoFlip(
-                  popoverState.triggerEl!,
-                  container,
-                  anchorOrigin,
-                  transformOrigin,
-                  offsetX,
-                  offsetY,
-                  flip,
-                  strategy
-                );
-              };
-              if (repositionOnScroll) {
-                popoverState.scrollHandler = reposition;
-                window.addEventListener('scroll', popoverState.scrollHandler, true);
-              }
-              if (repositionOnResize) {
-                popoverState.resizeHandler = reposition;
-                window.addEventListener('resize', popoverState.resizeHandler);
-              }
-            }
-
-            requestAnimationFrame(() => {
-              if (popoverState.triggerEl instanceof HTMLElement) {
-                positionPopoverAutoFlip(
-                  popoverState.triggerEl,
-                  container,
-                  anchorOrigin,
-                  transformOrigin,
-                  offsetX,
-                  offsetY,
-                  flip,
-                  strategy
-                );
-              }
-
-              if (initialFocus) {
-                const el = container.querySelector<HTMLElement>(initialFocus);
-                if (el) el.focus();
-                else container.focus();
-              } else {
-                container.focus();
-              }
-
-              popoverState._events?.show?.({ open: true });
-              requestAnimationFrame(() => {
-                popoverState._events?.didShow?.({ open: true });
-              });
-            });
-          },
-
-          close(e: any) {
-            if (!popoverState.open) return;
-            popoverState.open = false;
-
-            const container = popoverState.containerEl;
-            if (!container) return;
-
-            popoverState._events?.willClose?.({ open: false });
-
-            if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
-              popoverState.triggerEl.setAttribute('aria-expanded', 'false');
-            }
-
-            if (popoverState.outsideClickHandler) {
-              document.removeEventListener('click', popoverState.outsideClickHandler);
-              popoverState.outsideClickHandler = undefined;
-            }
-            if (popoverState.keydownHandler) {
-              document.removeEventListener('keydown', popoverState.keydownHandler);
-              popoverState.keydownHandler = undefined;
-            }
-
-            if (popoverState.focusTrapCleanup) {
-              popoverState.focusTrapCleanup();
-              popoverState.focusTrapCleanup = undefined;
-            }
-
-            if (popoverState.scrollHandler) {
-              window.removeEventListener('scroll', popoverState.scrollHandler, true);
-              popoverState.scrollHandler = undefined;
-            }
-            if (popoverState.resizeHandler) {
-              window.removeEventListener('resize', popoverState.resizeHandler);
-              popoverState.resizeHandler = undefined;
-            }
-
-            container.classList.remove('popoverPluginFadeInClass');
-            container.classList.add('popoverPluginFadeOutClass');
-            container.addEventListener(
-              'animationend',
-              () => {
-                container.hidden = true;
-                container.classList.remove('popoverPluginFadeOutClass');
-
-                if (popoverState.triggerEl instanceof HTMLElement) {
-                  popoverState.triggerEl.focus();
-                }
-                popoverState._events?.closed?.({ open: false });
-                popoverState._events?.didClosed?.({ open: false });
-              },
-              { once: true }
-            );
-          },
-
-          closeAll() {
-            popoverRegistry.forEach((apiItem) => {
-              apiItem.popover.actions.close(null);
-            });
-          },
-        },
-
-        id,
+        popoverState.containerEl = container;
+        return createPortal(jsx, container);
       },
-    };
 
-    if (!popoverRegistry.includes(api)) {
-      popoverRegistry.push(api);
-    }
-    return api;
+      events(handlers: PopoverEvents) {
+        popoverState._events = {
+          willShow: handlers.willShow,
+          show: handlers.show,
+          didShow: handlers.didShow,
+          willClose: handlers.willClose,
+          closed: handlers.closed,
+          didClosed: handlers.didClosed,
+        };
+      },
+
+      actions: {
+        show(e: any) {
+          if (popoverState.open) return;
+          popoverState.open = true;
+
+          const container = popoverState.containerEl;
+          if (!container) {
+            throw new Error(`[popover] containerEl not found.`);
+          }
+
+          popoverState._events?.willShow?.({ open: true });
+          popoverState.triggerEl = e?.currentTarget || e?.target || null;
+
+          container.hidden = false;
+          container.classList.remove('popoverPluginFadeOutClass');
+          container.classList.add('popoverPluginFadeInClass');
+
+          if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
+            popoverState.triggerEl.setAttribute('aria-expanded', 'true');
+            popoverState.triggerEl.setAttribute(
+              'aria-haspopup',
+              role === 'dialog' ? 'dialog' : 'menu'
+            );
+            popoverState.triggerEl.setAttribute('aria-controls', container.id);
+          }
+
+          if (close === 'outside-click') {
+            setTimeout(() => {
+              popoverState.outsideClickHandler = (evt: MouseEvent) => {
+                if (!container?.contains(evt.target as Node)) {
+                  if (excluded && Array.isArray(excluded) && excluded.length > 0) {
+                    const isInsideExcluded = excluded.some((exId) => {
+                      const exEl = document.getElementById(exId);
+                      return exEl?.contains(evt.target as Node);
+                    });
+                    if (isInsideExcluded) {
+                      return;
+                    }
+                  }
+                  api.popover.actions.close(evt);
+                }
+              };
+              document.addEventListener('click', popoverState.outsideClickHandler);
+            }, 0);
+          }
+
+          popoverState.keydownHandler = (evt: KeyboardEvent) => {
+            if (evt.key === 'Escape') {
+              api.popover.actions.close(evt);
+            }
+          };
+          document.addEventListener('keydown', popoverState.keydownHandler);
+
+          if (trapFocus) {
+            popoverState.focusTrapCleanup = enableFocusTrap(container);
+          }
+
+          if (popoverState.triggerEl instanceof HTMLElement) {
+            const reposition = () => {
+              positionPopoverAutoFlip(
+                popoverState.triggerEl!,
+                container,
+                anchorOrigin,
+                transformOrigin,
+                offsetX,
+                offsetY,
+                flip,
+                strategy
+              );
+            };
+            if (repositionOnScroll) {
+              popoverState.scrollHandler = reposition;
+              window.addEventListener('scroll', popoverState.scrollHandler, true);
+            }
+            if (repositionOnResize) {
+              popoverState.resizeHandler = reposition;
+              window.addEventListener('resize', popoverState.resizeHandler);
+            }
+          }
+
+          requestAnimationFrame(() => {
+            if (popoverState.triggerEl instanceof HTMLElement) {
+              positionPopoverAutoFlip(
+                popoverState.triggerEl,
+                container,
+                anchorOrigin,
+                transformOrigin,
+                offsetX,
+                offsetY,
+                flip,
+                strategy
+              );
+            }
+
+            if (initialFocus) {
+              const el = container.querySelector<HTMLElement>(initialFocus);
+              if (el) el.focus();
+              else container.focus();
+            } else {
+              container.focus();
+            }
+
+            popoverState._events?.show?.({ open: true });
+            requestAnimationFrame(() => {
+              popoverState._events?.didShow?.({ open: true });
+            });
+          });
+        },
+
+        close(e: any) {
+          if (!popoverState.open) return;
+          popoverState.open = false;
+
+          const container = popoverState.containerEl;
+          if (!container) return;
+
+          popoverState._events?.willClose?.({ open: false });
+
+          if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
+            popoverState.triggerEl.setAttribute('aria-expanded', 'false');
+          }
+
+          if (popoverState.outsideClickHandler) {
+            document.removeEventListener('click', popoverState.outsideClickHandler);
+            popoverState.outsideClickHandler = undefined;
+          }
+          if (popoverState.keydownHandler) {
+            document.removeEventListener('keydown', popoverState.keydownHandler);
+            popoverState.keydownHandler = undefined;
+          }
+
+          if (popoverState.focusTrapCleanup) {
+            popoverState.focusTrapCleanup();
+            popoverState.focusTrapCleanup = undefined;
+          }
+
+          if (popoverState.scrollHandler) {
+            window.removeEventListener('scroll', popoverState.scrollHandler, true);
+            popoverState.scrollHandler = undefined;
+          }
+          if (popoverState.resizeHandler) {
+            window.removeEventListener('resize', popoverState.resizeHandler);
+            popoverState.resizeHandler = undefined;
+          }
+
+          container.classList.remove('popoverPluginFadeInClass');
+          container.classList.add('popoverPluginFadeOutClass');
+          container.addEventListener(
+            'animationend',
+            () => {
+              container.hidden = true;
+              container.classList.remove('popoverPluginFadeOutClass');
+
+              if (popoverState.triggerEl instanceof HTMLElement) {
+                popoverState.triggerEl.focus();
+              }
+              popoverState._events?.closed?.({ open: false });
+              popoverState._events?.didClosed?.({ open: false });
+            },
+            { once: true }
+          );
+        },
+
+        closeAll() {
+          popoverRegistry.forEach((apiItem) => {
+            apiItem.popover.actions.close(null);
+          });
+        },
+      },
+
+      id,
+    },
   };
+
+  // ===== ทำเหมือนตอน plugin => push to popoverRegistry
+  if (!popoverRegistry.includes(api)) {
+    popoverRegistry.push(api);
+  }
+
+  // ===== กลับ: เนื่องจากผู้ใช้ต้องการ .panel, .events, .actions => return api.popover
+  return api.popover;
 }

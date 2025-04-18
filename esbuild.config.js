@@ -40,6 +40,7 @@ async function runBuild() {
       minify: true,
       platform: 'browser',
       format: 'esm',
+      external: ['react-dom'],
     });
   }
 }

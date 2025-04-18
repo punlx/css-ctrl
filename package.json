@@ -1,6 +1,6 @@
 {
   "name": "css-ctrl",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
@@ -29,13 +29,18 @@
     "build:client": "tsc -p tsconfig.client.json",
     "build:esbuild": "node esbuild.config.js",
     "move:plugin": "node scripts/move-plugin.js",
-    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/*.d.ts\" \"!dist/client/index.d.ts\" \"!dist/client/css.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/types.d.ts\" \"dist/plugin/**\" \"!dist/plugin/types.d.ts\" \"dist/shared/**\" \"!dist/shared/plugin.types.d.ts\"",
+    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/*.d.ts\" \"!dist/client/index.d.ts\" \"!dist/client/css.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/types.d.ts\" \"dist/plugin/**\" \"!dist/plugin/types.d.ts\"",
     "generate:dts": "node scripts/generate-dts.js",
     "build": "rm -rf dist && npm run build:plugin && npm run build:client && npm run build:esbuild && npm run move:plugin && npm run clean:nonmin && npm run generate:dts"
   },
   "devDependencies": {
+    "@types/react-dom": "^19.1.2",
     "del-cli": "^3.0.1",
     "esbuild": "^0.17.0",
+    "react-dom": "^19.1.0",
     "typescript": "^4.9.5"
+  },
+  "peerDependencies": {
+    "react-dom": "^19.1.0"
   }
 }
