@@ -142,3 +142,178 @@ dialog.dialogPluginFadeOutClass::backdrop {
   am[<-- suggestion move]
 }
 ```
+
+
+
+----
+popover.ts keep
+
+
+// src/plugin/popover.ts
+
+interface PopoverProperty {
+  id: string;
+  close?: 'outside-click' | 'close-action';
+  trapFocus?: boolean;
+  fadeDuration?: number;
+}
+
+// ขยาย storage.popover เป็นรูปแบบ object
+export const popover = (options: PopoverProperty) => {
+  // อ่านค่าจาก options
+  const {
+    id,
+    close = 'close-action', // default
+    trapFocus = false,
+    fadeDuration = 300,
+  } = options;
+
+  return (storage, className) => {
+    if (!storage.popover) {
+      storage.popover = {};
+    }
+
+    if (!storage.popover.containerEl) {
+      storage.popover.containerEl = {};
+    }
+
+    // เพิ่มตัวแปรไว้เก็บ reference
+    storage.popover.lastActiveElement = null;
+
+    // ฟังก์ชัน helper: จัดการ focus trap
+    function handleKeydown(e: KeyboardEvent) {
+      if (!storage.popover.containerEl) return;
+      const containerEl = storage.popover.containerEl as HTMLElement;
+      // ถ้า Esc => close
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        actions.close(e);
+      }
+      // ถ้า Tab => trapFocus
+      if (e.key === 'Tab') {
+        // หา focusable elements
+        const focusables = Array.from(
+          containerEl.querySelectorAll(
+            'a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])'
+          )
+        ) as HTMLElement[];
+        if (focusables.length === 0) {
+          e.preventDefault();
+          containerEl.focus();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const current = document.activeElement;
+        if (!e.shiftKey && current === last) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && current === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      }
+    }
+
+    // ฟังก์ชัน helper: คลิกนอก => ปิด
+    function handleDocClick(e: MouseEvent) {
+      if (!storage.popover.containerEl) return;
+      const containerEl = storage.popover.containerEl as HTMLElement;
+      if (!containerEl.contains(e.target as Node)) {
+        actions.close(e);
+      }
+    }
+
+    // สร้างชุด action
+    const actions = {
+      show: (e: any) => {
+        if (!storage.popover.containerEl) return;
+        const containerEl = storage.popover.containerEl as HTMLElement;
+
+        // บันทึก element ที่โฟกัสอยู่ก่อน
+        storage.popover.lastActiveElement = document.activeElement;
+
+        // ใส่ animation duration ลง style inline หรือ doc
+        containerEl.style.setProperty('--popoverOpacity', `1`);
+
+        // ถ้า close==='outside-click' => ผูก doc click
+        if (close === 'outside-click') {
+          document.addEventListener('mousedown', handleDocClick);
+        }
+
+        // ถ้า trapFocus => ผูก keydown
+        if (trapFocus) {
+          containerEl.addEventListener('keydown', handleKeydown);
+          // initial focus
+          setTimeout(() => {
+            // ถ้าพบ element ที่โฟกัสได้ => โฟกัส, ไม่งั้น focus containerEl
+            const focusable = containerEl.querySelector(
+              'a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])'
+            ) as HTMLElement;
+            if (focusable) {
+              focusable.focus();
+            } else {
+              containerEl.focus();
+            }
+          }, 0);
+        }
+      },
+      close: (e: any) => {
+        console.log('popover.ts:63 |e| : ', e);
+        if (!storage.popover.containerEl) return;
+        const containerEl = storage.popover.containerEl as HTMLElement;
+
+        // เอา doc click ออก
+        if (close === 'outside-click') {
+          document.removeEventListener('mousedown', handleDocClick);
+        }
+        // เอา keydown ออก
+        if (trapFocus) {
+          containerEl.removeEventListener('keydown', handleKeydown);
+        }
+        containerEl.style.setProperty('--popoverOpacity', `0`);
+
+        // คืนโฟกัส
+        if (storage.popover.lastActiveElement instanceof HTMLElement) {
+          storage.popover.lastActiveElement.focus();
+        }
+        storage.popover.lastActiveElement = null;
+      },
+    };
+
+    return {
+      popover: {
+        panel: (jsx: any) => {
+          if (!jsx) {
+            throw new Error(`ให้บอกว่า จะต้องมีการกำหนด jsx ก่อนเท่านั้น`);
+          }
+
+          // ตรวจสอบว่ามี div เดิมอยู่ใน DOM แล้วหรือยัง
+          const existing = document.getElementById(id);
+
+          const container =
+            existing ??
+            (() => {
+              const containerEl = document.createElement('div');
+              containerEl.id = id;
+              containerEl.setAttribute('role', 'dialog');
+              containerEl.setAttribute('aria-modal', 'false');
+              containerEl.tabIndex = -1;
+              containerEl.classList.add('popoverPluginFade');
+              containerEl.style.setProperty('--popoverFadeDuration', `${fadeDuration}ms`);
+              containerEl.style.setProperty('--popoverOpacity', `0`);
+
+              document.body.appendChild(containerEl);
+              storage.popover.containerEl = containerEl;
+              return containerEl;
+            })();
+
+          return storage.plugin.react.createPortal(jsx, container);
+        },
+        events: () => {},
+        actions,
+        id,
+      },
+    };
+  };
+};

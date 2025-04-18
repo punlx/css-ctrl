@@ -1,4 +1,5 @@
-// src/plugin/types.ts
+// src/plugin/dialog.ts
+
 const DIALOG_PLUGIN_FADE_DURATION = 'dialogPluginFadeDuration';
 const DIALOG_PLUGIN_BACKDROP_COLOR = 'dialogPluginBackdropColor';
 const DIALOG_PLUGIN_Fade_SCALE = 'dialogPluginFadeScale';
