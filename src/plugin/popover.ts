@@ -100,6 +100,11 @@ export interface PopoverProperty {
   ariaLabelledby?: string;
   ariaDescribedby?: string;
   toggleAriaExpanded?: boolean;
+
+  excluded?: string[];
+
+  // ===== เพิ่ม property zIndex?: number => กำหนด z-index ของ container
+  zIndex?: number;
 }
 
 // ======================
@@ -338,11 +343,12 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
     ariaLabelledby,
     ariaDescribedby,
     toggleAriaExpanded = true,
+
+    excluded,
+    zIndex, // ใหม่: zIndex?: number
   } = options;
 
-  // เนื้อหา
   return (storage: Record<string, any>) => {
-    // popoverState
     if (!storage.popover) {
       storage.popover = {} as PopoverState;
     }
@@ -376,6 +382,11 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
 
             container.tabIndex = -1;
             container.classList.add('popoverPlugin');
+            // ถ้ากำหนด zIndex => set style.zIndex
+            if (typeof zIndex === 'number') {
+              container.style.zIndex = String(zIndex);
+            }
+
             document.body.appendChild(container);
           }
 
@@ -431,6 +442,16 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
               setTimeout(() => {
                 popoverState.outsideClickHandler = (evt: MouseEvent) => {
                   if (!container?.contains(evt.target as Node)) {
+                    // check excluded popovers => if evt in any excluded => skip close
+                    if (excluded && Array.isArray(excluded) && excluded.length > 0) {
+                      const isInsideExcluded = excluded.some((exId) => {
+                        const exEl = document.getElementById(exId);
+                        return exEl?.contains(evt.target as Node);
+                      });
+                      if (isInsideExcluded) {
+                        return; // skip
+                      }
+                    }
                     api.popover.actions.close(evt);
                   }
                 };
