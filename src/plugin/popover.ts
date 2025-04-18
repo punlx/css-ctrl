@@ -100,6 +100,13 @@ export interface PopoverProperty {
 
   // ใช้ position absolute/fixed
   strategy?: 'absolute' | 'fixed';
+
+  // ===== ARIA =====
+  role?: string; // เช่น 'dialog', 'menu', ...
+  ariaLabel?: string; // ถ้าไม่ระบุ ariaLabelledby
+  ariaLabelledby?: string; // ถ้ามี heading
+  ariaDescribedby?: string; // ถ้ามีคำอธิบาย
+  toggleAriaExpanded?: boolean; // default = true
 }
 
 // ======================
@@ -174,21 +181,16 @@ function computeAnchorAndTransform(
 }
 
 // ======================
-// ฟังก์ชัน flipCenter: ถ้า anchor/transform horizontal='center' แต่ล้น => โปรโมตเป็น 'left' หรือ 'right'
+// ฟังก์ชัน flipCenterHorizontal
 // ======================
 function flipCenterHorizontal(
   anchor: PopoverProperty['anchorOrigin'],
   transform: PopoverProperty['transformOrigin'],
   rect: DOMRect
 ) {
-  // shallow copy
   const a = { ...anchor };
   const t = { ...transform };
 
-  // ถ้า rect.left < 0 => แสดงว่าล้นซ้าย => ให้ popover ไปทาง left
-  //   => anchorOrigin.horizontal='left', transformOrigin.horizontal='left'
-  // ถ้า rect.right > window.innerWidth => => anchorOrigin.horizontal='right', transformOrigin.horizontal='right'
-  // เลือกอันที่เหลือพื้นที่มากกว่า หรือใช้ตรรกะง่าย ๆ
   if (rect.left < 0 && a.horizontal === 'center') {
     a.horizontal = 'left';
     if (t.horizontal === 'center') {
@@ -231,9 +233,6 @@ function isOutOfViewport(r: DOMRect) {
 
 // ======================
 // positionPopoverAutoFlip
-// - ถ้าวางครั้งแรกแล้วล้น
-// - ถ้า anchor/transform horizontal/vertical = 'center' => โปรโมต 'left'/'right' หรือ 'top'/'bottom'
-// - ลอง flip top<->bottom, left<->right ถ้ายังล้นอีก
 // ======================
 function positionPopoverAutoFlip(
   triggerEl: HTMLElement,
@@ -271,13 +270,11 @@ function positionPopoverAutoFlip(
     return containerEl.getBoundingClientRect();
   }
 
-  // 1) วางครั้งแรก
   let rect = doPosition(anchorOrigin, transformOrigin);
-  if (!flip) return; // ถ้าไม่ flip => จบ
+  if (!flip) return;
 
-  if (!isOutOfViewport(rect)) return; // ไม่หลุด => จบ
+  if (!isOutOfViewport(rect)) return;
 
-  // 2) ถ้าหลุด => flip center horizontal/vertical ก่อน
   let { anchorOrigin: a2, transformOrigin: t2 } = flipCenterHorizontal(
     anchorOrigin,
     transformOrigin,
@@ -285,15 +282,10 @@ function positionPopoverAutoFlip(
   );
   ({ anchorOrigin: a2, transformOrigin: t2 } = flipCenterVertical(a2, t2, rect));
   rect = doPosition(a2, t2);
+  if (!isOutOfViewport(rect)) return;
 
-  if (!isOutOfViewport(rect)) return; // สำเร็จ => จบ
-
-  // 3) ถ้ายังหลุด => flip top/bottom, left/right แบบเดิม (เหมือน code เก่าก่อน)
-  //   หรือจะ implement ต่อได้ เช่น
   rect = doFlipStandard(a2, t2);
 
-  // doFlipStandard = logic เดิมที่ flip top <-> bottom, left <-> right
-  // ตัวอย่างสั้น ๆ:
   function doFlipStandard(
     aOri: PopoverProperty['anchorOrigin'],
     tOri: PopoverProperty['transformOrigin']
@@ -301,7 +293,6 @@ function positionPopoverAutoFlip(
     const aTmp = { ...aOri };
     const tTmp = { ...tOri };
 
-    // flip vertical
     if (rect.bottom > window.innerHeight && aTmp.vertical === 'bottom') {
       aTmp.vertical = 'top';
       if (tTmp.vertical === 'top') {
@@ -314,7 +305,6 @@ function positionPopoverAutoFlip(
       }
     }
 
-    // flip horizontal
     if (rect.right > window.innerWidth && aTmp.horizontal === 'right') {
       aTmp.horizontal = 'left';
       if (tTmp.horizontal === 'left') {
@@ -329,8 +319,6 @@ function positionPopoverAutoFlip(
 
     return doPosition(aTmp, tTmp);
   }
-
-  // ได้ rect ใหม่ => ไม่ทำอะไรต่อ ถ้ายังหลุด => user อาจต้องปรับ
 }
 
 // ======================
@@ -352,6 +340,13 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
     repositionOnScroll = true,
     repositionOnResize = true,
     strategy = 'absolute',
+
+    // ===== ARIA
+    role = 'dialog',
+    ariaLabel,
+    ariaLabelledby,
+    ariaDescribedby,
+    toggleAriaExpanded = true,
   } = options;
 
   return (storage: Record<string, any>) => {
@@ -374,8 +369,19 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
             container = document.createElement('div');
             container.id = id;
             container.setAttribute('hidden', '');
-            container.setAttribute('role', 'dialog');
+            // ARIA
+            container.setAttribute('role', role || 'dialog');
             container.setAttribute('aria-modal', 'false');
+            if (ariaLabel) {
+              container.setAttribute('aria-label', ariaLabel);
+            }
+            if (ariaLabelledby) {
+              container.setAttribute('aria-labelledby', ariaLabelledby);
+            }
+            if (ariaDescribedby) {
+              container.setAttribute('aria-describedby', ariaDescribedby);
+            }
+
             container.tabIndex = -1;
             container.classList.add('popoverPlugin');
             document.body.appendChild(container);
@@ -415,12 +421,20 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
             popoverState._events?.willShow?.({ open: true });
             popoverState.triggerEl = e?.currentTarget || e?.target || null;
 
-            // เปิด popover
             container.hidden = false;
             container.classList.remove('popoverPluginFadeOutClass');
             container.classList.add('popoverPluginFadeInClass');
 
-            // outside-click
+            // ถ้า toggleAriaExpanded => ตั้ง aria-expanded="true" + aria-controls
+            if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
+              popoverState.triggerEl.setAttribute('aria-expanded', 'true');
+              popoverState.triggerEl.setAttribute(
+                'aria-haspopup',
+                role === 'dialog' ? 'dialog' : 'menu'
+              );
+              popoverState.triggerEl.setAttribute('aria-controls', container.id);
+            }
+
             if (close === 'outside-click') {
               setTimeout(() => {
                 popoverState.outsideClickHandler = (evt: MouseEvent) => {
@@ -432,7 +446,6 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
               }, 0);
             }
 
-            // ESC
             popoverState.keydownHandler = (evt: KeyboardEvent) => {
               if (evt.key === 'Escape') {
                 api.popover.actions.close(evt);
@@ -440,12 +453,10 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
             };
             document.addEventListener('keydown', popoverState.keydownHandler);
 
-            // focus trap
             if (trapFocus) {
               popoverState.focusTrapCleanup = enableFocusTrap(container);
             }
 
-            // ถ้าต้อง repositionOnScroll/resize
             if (popoverState.triggerEl instanceof HTMLElement) {
               const reposition = () => {
                 positionPopoverAutoFlip(
@@ -469,7 +480,6 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
               }
             }
 
-            // วางตำแหน่ง + flip
             requestAnimationFrame(() => {
               if (popoverState.triggerEl instanceof HTMLElement) {
                 positionPopoverAutoFlip(
@@ -508,7 +518,11 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
 
             popoverState._events?.willClose?.({ open: false });
 
-            // ถอน listener
+            // toggleAriaExpanded => false
+            if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
+              popoverState.triggerEl.setAttribute('aria-expanded', 'false');
+            }
+
             if (popoverState.outsideClickHandler) {
               document.removeEventListener('click', popoverState.outsideClickHandler);
               popoverState.outsideClickHandler = undefined;
