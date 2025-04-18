@@ -1,6 +1,4 @@
-// popover.ts
-
-import { CssCtrlPlugin } from './dialogPlugin';
+import { CssCtrlPlugin } from './dialog';
 
 export interface PopoverEvents {
   willShow?: (info: { open: boolean }) => void;
@@ -39,10 +37,12 @@ interface PopoverAPI {
   };
 }
 
-// registry เก็บ popover API => เอาไว้ closeAll
+// เก็บ Popover API => สำหรับ closeAll
 const popoverRegistry: PopoverAPI[] = [];
 
-// ฟังก์ชันโฟกัส trap
+// ======================
+// Trap focus
+// ======================
 function enableFocusTrap(el: HTMLElement): () => void {
   const handler = (evt: KeyboardEvent) => {
     if (evt.key === 'Tab') {
@@ -77,74 +77,72 @@ export interface PopoverProperty {
   trapFocus?: boolean;
   initialFocus?: string;
 
-  // anchor/transform origin
+  // อนุญาต vertical,horizontal = undefined ได้
   anchorOrigin?: {
-    vertical: 'top' | 'center' | 'bottom';
-    horizontal: 'left' | 'center' | 'right';
+    vertical?: 'top' | 'center' | 'bottom' | undefined;
+    horizontal?: 'left' | 'center' | 'right' | undefined;
   };
   transformOrigin?: {
-    vertical: 'top' | 'center' | 'bottom';
-    horizontal: 'left' | 'center' | 'right';
+    vertical?: 'top' | 'center' | 'bottom' | undefined;
+    horizontal?: 'left' | 'center' | 'right' | undefined;
   };
 
-  // offset
   offsetX?: number;
   offsetY?: number;
-
-  // flip => ถ้าวางแล้วหลุดจอ => พยายาม flip
   flip?: boolean;
-
-  // reposition on scroll/resize
   repositionOnScroll?: boolean;
   repositionOnResize?: boolean;
-
-  // ใช้ position absolute/fixed
   strategy?: 'absolute' | 'fixed';
 
-  // ===== ARIA =====
-  role?: string; // เช่น 'dialog', 'menu', ...
-  ariaLabel?: string; // ถ้าไม่ระบุ ariaLabelledby
-  ariaLabelledby?: string; // ถ้ามี heading
-  ariaDescribedby?: string; // ถ้ามีคำอธิบาย
-  toggleAriaExpanded?: boolean; // default = true
+  // ARIA
+  role?: string;
+  ariaLabel?: string;
+  ariaLabelledby?: string;
+  ariaDescribedby?: string;
+  toggleAriaExpanded?: boolean;
 }
 
 // ======================
-// ฟังก์ชันคำนวณ anchor/transform
+// Compute anchor/transform
 // ======================
 function computeAnchorAndTransform(
   triggerRect: DOMRect,
   popRect: DOMRect,
-  anchorOrigin: PopoverProperty['anchorOrigin'],
-  transformOrigin: PopoverProperty['transformOrigin'],
+  anchorOrigin: {
+    vertical?: 'top' | 'center' | 'bottom' | undefined;
+    horizontal?: 'left' | 'center' | 'right' | undefined;
+  },
+  transformOrigin: {
+    vertical?: 'top' | 'center' | 'bottom' | undefined;
+    horizontal?: 'left' | 'center' | 'right' | undefined;
+  },
   offsetX: number,
   offsetY: number
 ) {
-  const aoV = anchorOrigin?.vertical || 'bottom';
-  const aoH = anchorOrigin?.horizontal || 'left';
+  // กำหนด default
+  const aoV = anchorOrigin.vertical ?? 'bottom';
+  const aoH = anchorOrigin.horizontal ?? 'left';
 
-  const toV = transformOrigin?.vertical || 'top';
-  const toH = transformOrigin?.horizontal || 'left';
+  const toV = transformOrigin.vertical ?? 'top';
+  const toH = transformOrigin.horizontal ?? 'left';
 
   // 1) anchor point
-  let xA = 0;
   let yA = 0;
-
   if (aoV === 'top') {
     yA = triggerRect.top;
   } else if (aoV === 'center') {
     yA = (triggerRect.top + triggerRect.bottom) / 2;
   } else {
-    // 'bottom'
+    // bottom
     yA = triggerRect.bottom;
   }
 
+  let xA = 0;
   if (aoH === 'left') {
     xA = triggerRect.left;
   } else if (aoH === 'center') {
     xA = (triggerRect.left + triggerRect.right) / 2;
   } else {
-    // 'right'
     xA = triggerRect.right;
   }
 
@@ -152,40 +150,22 @@ function computeAnchorAndTransform(
   const w = popRect.width;
   const h = popRect.height;
 
-  let xT = 0;
-  let yT = 0;
+  const tv = toV === 'top' ? 0 : toV === 'center' ? h / 2 : h;
+  const th = toH === 'left' ? 0 : toH === 'center' ? w / 2 : w;
 
-  if (toV === 'top') {
-    yT = 0;
-  } else if (toV === 'center') {
-    yT = h / 2;
-  } else {
-    // 'bottom'
-    yT = h;
-  }
-
-  if (toH === 'left') {
-    xT = 0;
-  } else if (toH === 'center') {
-    xT = w / 2;
-  } else {
-    // 'right'
-    xT = w;
-  }
-
-  // 3) position = anchor - transform + offset
-  let left = xA - xT + offsetX;
-  let top = yA - yT + offsetY;
+  // 3) position
+  const left = xA - th + offsetX;
+  const top = yA - tv + offsetY;
 
   return { left, top };
 }
 
 // ======================
-// ฟังก์ชัน flipCenterHorizontal
+// flipCenterHorizontal
 // ======================
 function flipCenterHorizontal(
-  anchor: PopoverProperty['anchorOrigin'],
-  transform: PopoverProperty['transformOrigin'],
+  anchor: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' },
+  transform: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' },
   rect: DOMRect
 ) {
   const a = { ...anchor };
@@ -205,9 +185,10 @@ function flipCenterHorizontal(
   return { anchorOrigin: a, transformOrigin: t };
 }
 
+// flipCenterVertical
 function flipCenterVertical(
-  anchor: PopoverProperty['anchorOrigin'],
-  transform: PopoverProperty['transformOrigin'],
+  anchor: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' },
+  transform: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' },
   rect: DOMRect
 ) {
   const a = { ...anchor };
@@ -237,22 +218,28 @@ function isOutOfViewport(r: DOMRect) {
 function positionPopoverAutoFlip(
   triggerEl: HTMLElement,
   containerEl: HTMLElement,
-  anchorOrigin: PopoverProperty['anchorOrigin'],
-  transformOrigin: PopoverProperty['transformOrigin'],
+  anchorOrigin: {
+    vertical?: 'top' | 'center' | 'bottom';
+    horizontal?: 'left' | 'center' | 'right';
+  },
+  transformOrigin: {
+    vertical?: 'top' | 'center' | 'bottom';
+    horizontal?: 'left' | 'center' | 'right';
+  },
   offsetX: number,
   offsetY: number,
-  flip: boolean,
-  strategy: PopoverProperty['strategy']
+  flip: boolean | undefined,
+  strategy: 'absolute' | 'fixed' | undefined
 ) {
   containerEl.style.position = strategy || 'absolute';
 
+  // ตัวฟังก์ชันนี้ return void - flip logic
   function doPosition(
-    aOri: PopoverProperty['anchorOrigin'],
-    tOri: PopoverProperty['transformOrigin']
+    aOri: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' },
+    tOri: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' }
   ) {
     const triggerRect = triggerEl.getBoundingClientRect();
     const popRect = containerEl.getBoundingClientRect();
-
     const scrollX = strategy === 'fixed' ? 0 : window.scrollX;
     const scrollY = strategy === 'fixed' ? 0 : window.scrollY;
 
@@ -270,11 +257,13 @@ function positionPopoverAutoFlip(
     return containerEl.getBoundingClientRect();
   }
 
+  // 1) วางครั้งแรก
   let rect = doPosition(anchorOrigin, transformOrigin);
   if (!flip) return;
 
   if (!isOutOfViewport(rect)) return;
 
+  // 2) flip center horizontal/vertical
   let { anchorOrigin: a2, transformOrigin: t2 } = flipCenterHorizontal(
     anchorOrigin,
     transformOrigin,
@@ -284,15 +273,17 @@ function positionPopoverAutoFlip(
   rect = doPosition(a2, t2);
   if (!isOutOfViewport(rect)) return;
 
+  // 3) flip standard top<->bottom / left<->right
   rect = doFlipStandard(a2, t2);
 
   function doFlipStandard(
-    aOri: PopoverProperty['anchorOrigin'],
-    tOri: PopoverProperty['transformOrigin']
+    aOri: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' },
+    tOri: { vertical?: 'top' | 'center' | 'bottom'; horizontal?: 'left' | 'center' | 'right' }
   ) {
     const aTmp = { ...aOri };
     const tTmp = { ...tOri };
 
+    // flip vertical
     if (rect.bottom > window.innerHeight && aTmp.vertical === 'bottom') {
       aTmp.vertical = 'top';
       if (tTmp.vertical === 'top') {
@@ -305,6 +296,7 @@ function positionPopoverAutoFlip(
       }
     }
 
+    // flip horizontal
     if (rect.right > window.innerWidth && aTmp.horizontal === 'right') {
       aTmp.horizontal = 'left';
       if (tTmp.horizontal === 'left') {
@@ -322,7 +314,7 @@ function positionPopoverAutoFlip(
 }
 
 // ======================
-// ตัว plugin หลัก
+// ส่วนหลัก: popover(...)
 // ======================
 export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
   const {
@@ -335,13 +327,12 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
     transformOrigin = { vertical: 'top', horizontal: 'left' },
     offsetX = 0,
     offsetY = 0,
-
     flip = true,
     repositionOnScroll = true,
     repositionOnResize = true,
     strategy = 'absolute',
 
-    // ===== ARIA
+    // ARIA
     role = 'dialog',
     ariaLabel,
     ariaLabelledby,
@@ -349,7 +340,9 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
     toggleAriaExpanded = true,
   } = options;
 
+  // เนื้อหา
   return (storage: Record<string, any>) => {
+    // popoverState
     if (!storage.popover) {
       storage.popover = {} as PopoverState;
     }
@@ -369,8 +362,7 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
             container = document.createElement('div');
             container.id = id;
             container.setAttribute('hidden', '');
-            // ARIA
-            container.setAttribute('role', role || 'dialog');
+            container.setAttribute('role', role);
             container.setAttribute('aria-modal', 'false');
             if (ariaLabel) {
               container.setAttribute('aria-label', ariaLabel);
@@ -391,7 +383,7 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
 
           if (!storage.plugin?.react?.createPortal) {
             throw new Error(
-              `[CSS-CTRL-ERR] theme.plugin({ react: { createPortal } }) must be set before using popover.`
+              `[CSS-CTRL-ERR] theme.plugin({ react: {createPortal} }) must be set before using popover.`
             );
           }
           return storage.plugin.react.createPortal(jsx, container);
@@ -415,17 +407,17 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
 
             const container = popoverState.containerEl;
             if (!container) {
-              throw new Error(`[popover] containerEl not found. Did you call .panel(...)?`);
+              throw new Error(`[popover] containerEl not found.`);
             }
 
             popoverState._events?.willShow?.({ open: true });
+
             popoverState.triggerEl = e?.currentTarget || e?.target || null;
 
             container.hidden = false;
             container.classList.remove('popoverPluginFadeOutClass');
             container.classList.add('popoverPluginFadeInClass');
 
-            // ถ้า toggleAriaExpanded => ตั้ง aria-expanded="true" + aria-controls
             if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
               popoverState.triggerEl.setAttribute('aria-expanded', 'true');
               popoverState.triggerEl.setAttribute(
@@ -438,7 +430,7 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
             if (close === 'outside-click') {
               setTimeout(() => {
                 popoverState.outsideClickHandler = (evt: MouseEvent) => {
-                  if (!container.contains(evt.target as Node)) {
+                  if (!container?.contains(evt.target as Node)) {
                     api.popover.actions.close(evt);
                   }
                 };
@@ -518,7 +510,6 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
 
             popoverState._events?.willClose?.({ open: false });
 
-            // toggleAriaExpanded => false
             if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
               popoverState.triggerEl.setAttribute('aria-expanded', 'false');
             }
@@ -532,13 +523,11 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
               popoverState.keydownHandler = undefined;
             }
 
-            // focus trap
             if (popoverState.focusTrapCleanup) {
               popoverState.focusTrapCleanup();
               popoverState.focusTrapCleanup = undefined;
             }
 
-            // scroll/resize
             if (popoverState.scrollHandler) {
               window.removeEventListener('scroll', popoverState.scrollHandler, true);
               popoverState.scrollHandler = undefined;
@@ -548,7 +537,6 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
               popoverState.resizeHandler = undefined;
             }
 
-            // fadeOut
             container.classList.remove('popoverPluginFadeInClass');
             container.classList.add('popoverPluginFadeOutClass');
             container.addEventListener(
@@ -560,7 +548,6 @@ export function popover(options: PopoverProperty): CssCtrlPlugin<PopoverAPI> {
                 if (popoverState.triggerEl instanceof HTMLElement) {
                   popoverState.triggerEl.focus();
                 }
-
                 popoverState._events?.closed?.({ open: false });
                 popoverState._events?.didClosed?.({ open: false });
               },
