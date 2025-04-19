@@ -272,6 +272,10 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     storage.select.containerEl = undefined;
   }
 
+  /**
+   * แก้ไขจุดนี้ เพื่อให้ 'single-then-multi' ไม่ถูกล็อกเป็น multi ถาวร
+   * แต่จะเช็ค Shift/Ctrl/Meta ทุกครั้งที่มีการ click
+   */
   function handleContainerClick(evt: MouseEvent) {
     const el = (evt.target as HTMLElement).closest('[role="option"]') as HTMLElement | null;
     if (!el) return;
@@ -280,26 +284,49 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       return;
     }
 
-    // กรณี type === 'single-then-multi' แต่ยังเป็น single => ถ้าเจอ shift/ctrl => switch to multi
-    if (type === 'single-then-multi' && selectMode === 'single') {
-      if (evt.shiftKey || evt.ctrlKey || evt.metaKey) {
-        selectMode = 'multi';
-        // อัปเดต ariaMultiSelectable
-        const ref = storage.select.containerEl;
-        if (ref) {
-          ref.ariaMultiSelectable = 'true';
-        }
+    // ถ้า shiftKey => select range
+    // ถ้า ctrlKey/metaKey => toggle
+    // ถ้าไม่กด => single
+    // -----------------------------------------
+    if (type === 'single-then-multi') {
+      if (evt.shiftKey) {
+        // SHIFT+Click => select ช่วง range
+        doSelectRange(el);
+        storage.select.activeItemEl = el;
+        updateAriaActiveDescendant();
+        scrollToItem(el);
+        storage.select.lastIndexClicked = getIndexOf(el);
+        storage.select.containerEl?.focus();
+        return;
+      } else if (evt.ctrlKey || evt.metaKey) {
+        // CTRL+Click => toggle เฉพาะตัวนี้
+        doToggleItem(el);
+        storage.select.activeItemEl = el;
+        updateAriaActiveDescendant();
+        scrollToItem(el);
+        storage.select.lastIndexClicked = getIndexOf(el);
+        storage.select.containerEl?.focus();
+        return;
+      } else {
+        // คลิกปกติ => single
+        callSelectEvent('willSelect', el);
+        doSingleSelectLogic(el);
+        storage.select.activeItemEl = el;
+        updateAriaActiveDescendant();
+        scrollToItem(el);
+        storage.select.lastIndexClicked = getIndexOf(el);
+        storage.select.containerEl?.focus();
+        return;
       }
     }
 
-    // ถ้าเป็น multi-mode => เช็ค shiftKey / ctrlKey
+    // ถ้าเป็น multi-mode => เช็ค shiftKey / ctrlKey (กรณี type === 'multi-select')
     if (selectMode === 'multi') {
       if (evt.shiftKey) {
         // SHIFT+Click => select ช่วง range
         doSelectRange(el);
         storage.select.activeItemEl = el;
         updateAriaActiveDescendant();
-        // scroll
         scrollToItem(el);
         storage.select.containerEl?.focus();
         return;
@@ -315,7 +342,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       }
     }
 
-    // ไม่เข้ากรณี shift/ctrl (หรืออยู่ในโหมด single) => logic select ปกติ
+    // ไม่เข้ากรณี shift/ctrl (หรืออยู่ในโหมด single-select โดยตรง) => logic select ปกติ
     callSelectEvent('willSelect', el);
     if (selectMode === 'single') {
       doSingleSelectLogic(el);
@@ -419,25 +446,23 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     return el.getAttribute('aria-disabled') === 'true';
   }
 
-  /** Single Select Logic => clear เก่า + select ใหม่ */
+  /**
+   * Single Select Logic => clear เก่า + select ใหม่
+   * (แก้ไขใหม่เพื่อให้คลิก item เดิมก็ clear เก่าด้วย)
+   */
   function doSingleSelectLogic(el: HTMLElement) {
     storage.select.reselectAllowed = false;
     storage.select.unselectAllowed = false;
     const arr = storage.select.selectedItems;
     const idx = arr.findIndex((s) => s.el === el);
+
     if (idx >= 0) {
-      // reSelect
       storage.select.reselectAllowed = true;
       callSelectEvent('reSelect', el);
-      if (toggleable) {
-        el.setAttribute('aria-selected', 'false');
-        arr.splice(idx, 1);
-        storage.select.unselectAllowed = true;
-        callSelectEvent('unSelect', el);
-      }
-      return;
+      // ไม่ return ทันที เพื่อให้โค้ดด้านล่างเคลียร์ selection เก่า + select item นี้ใหม่
     }
-    // clear ของเก่าหมด
+
+    // clear ของเก่าหมดก่อนเสมอ
     if (arr.length > 0) {
       for (const oldItem of [...arr]) {
         oldItem.el.setAttribute('aria-selected', 'false');
@@ -446,6 +471,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       arr.length = 0;
       storage.select.unselectAllowed = true;
     }
+
     // select ใหม่
     el.setAttribute('aria-selected', 'true');
     arr.push({ el, dataItem: findDataItem(el) });
