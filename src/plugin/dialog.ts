@@ -15,11 +15,11 @@ const getDialogPluginWidth = (scroll: 'body' | 'modal') =>
   scroll === 'body' ? '100%' : 'fit-content';
 
 // Callback สำหรับ dialog
-export interface DialogCallbackInfo {
+interface DialogCallbackInfo {
   open: boolean;
 }
 
-export interface DialogEvents {
+interface DialogEvents {
   willShow?: (info: DialogCallbackInfo) => void;
   show?: (info: DialogCallbackInfo) => void;
   didShow?: (info: DialogCallbackInfo) => void;
@@ -28,7 +28,7 @@ export interface DialogEvents {
   didClosed?: (info: DialogCallbackInfo) => void;
 }
 
-export interface DialogItems {
+interface DialogItems {
   state?: { open: boolean };
   dialog?: HTMLDialogElement | null;
   root?: any; // React Root
@@ -39,7 +39,7 @@ export interface DialogItems {
 }
 
 // เก็บทั้งหมดไว้ใน storage.dialog
-export interface DialogState {
+interface DialogState {
   dialogItems: DialogItems;
   _events: DialogEvents;
 }
@@ -48,7 +48,7 @@ export interface DialogState {
  * DialogStorage: interface ของ storage ที่ใช้ใน plugin dialog
  * (extend Record<string,unknown>) => TS ยอมให้มี property อื่นด้วย
  */
-export interface DialogStorage extends Record<string, unknown> {
+interface DialogStorage extends Record<string, unknown> {
   dialog: DialogState;
 }
 
@@ -57,7 +57,7 @@ export interface DialogStorage extends Record<string, unknown> {
  *
  * Requirement ใหม่: เปลี่ยนจาก backdropCloseable เป็น close?: "outside-close" | "close-action"
  */
-export interface DialogPluginOptions {
+interface DialogPluginOptions {
   id: string;
   modal: any;
   heading: string;

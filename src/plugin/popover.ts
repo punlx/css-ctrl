@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 
-export interface PopoverEvents {
+interface PopoverEvents {
   willShow?: (info: { open: boolean }) => void;
   show?: (info: { open: boolean }) => void;
   didShow?: (info: { open: boolean }) => void;
@@ -37,6 +37,7 @@ interface PopoverAPI {
   aria: {
     controls: string;
     haspopup: 'dialog' | 'menu' | 'tree' | 'grid' | 'listbox';
+    expanded: boolean;
   };
 }
 
@@ -75,7 +76,7 @@ type PopoverTypes = 'dropdown' | 'listbox' | 'treeview' | 'grid' | 'modal';
 // ======================
 // ประกาศ Options
 // ======================
-export interface PopoverProperty {
+interface PopoverProperty {
   // TODO cache global ต้องไม่ซ้ำกับคนอื่น
   controls: string;
   type: PopoverTypes;
@@ -364,6 +365,7 @@ export function popover(options: PopoverProperty) {
     aria: {
       controls: controls,
       haspopup: hashPopup[type],
+      expanded: false,
     },
     panel(jsx: any) {
       let container = document.getElementById(controls);

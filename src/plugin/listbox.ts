@@ -1,7 +1,7 @@
 // src/plugin/select.ts
 
 /** โครงสร้างข้อมูลสำหรับ DataItem */
-export interface DataItem {
+interface DataItem {
   [key: string]: any;
 }
 
@@ -103,7 +103,7 @@ interface InitParams<T> {
  * เพิ่ม <T> เพื่อรองรับ selectedItems: SelectedItem<T>
  * และ _selectData?: T[]
  */
-export interface SelectStorage<T> extends Record<string, unknown> {
+interface SelectStorage<T> extends Record<string, unknown> {
   select: {
     selectedItems: SelectedItem<T>[];
     _events: SelectEvents<T>;
