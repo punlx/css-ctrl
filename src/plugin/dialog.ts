@@ -190,7 +190,7 @@ export function dialog(options: DialogPluginOptions) {
     }
 
     // ===== เพิ่ม logic สำหรับ headingId =====
-    // ถ้า dev ใส่ทั้ง id และ labelledby => สร้าง headingId = `${id}-${labelledby}`
+    // ถ้า dev ใส่ทั้ง id และ labelledby => สร้าง headingId = `${id}-${heading}`
     // แล้วใช้ setAttribute('aria-labelledby', headingId) เพื่อ override
     dialogEl.setAttribute('aria-labelledby', `${id}-${heading}`);
 
@@ -229,6 +229,22 @@ export function dialog(options: DialogPluginOptions) {
     // 2) render(modal) ลงใน contentDiv
     const root = createRoot(contentDiv);
     root.render(modal);
+
+    // ======= NEW CODE: ตรวจสอบว่ามี heading element ID ตรงตามที่กำหนดหรือไม่ =======
+    // ทำใน requestAnimationFrame หรือ setTimeout เพื่อให้ React render เสร็จก่อน
+    requestAnimationFrame(() => {
+      const headingSelector = `#${id}-${heading}`;
+      const headingElement = contentDiv.querySelector(headingSelector);
+      if (!headingElement) {
+        console.warn(
+          `[CSS-CTRL-WARN] Missing heading element in modal "${id}".\n\n` +
+            `To ensure accessibility (A11y), add a heading like:\n` +
+            `  <h1 id={dialogInstance.aria.heading}>Your Dialog Title</h1>\n` +
+            `  // dialogInstance.aria.heading === '${headingSelector}'\n\n` +
+            `This allows screen readers to announce the dialog title via aria-labelledby.`
+        );
+      }
+    });
 
     // เดิม: ถ้า backdropCloseable => ผูก event click => onBackdropClick
     // ปัจจุบัน: ถ้า closeMode === 'outside-close' => ให้คลิก backdrop เพื่อปิด
@@ -337,7 +353,7 @@ export function dialog(options: DialogPluginOptions) {
 
   // ===== Return API =====
 
-  // นำ headingId (ซึ่งเป็นตัวเต็มของ id + labelledby) ใส่ใน output
+  // นำ headingId (ซึ่งเป็นตัวเต็มของ id + heading) ใส่ใน output
   // เพื่อให้ dev สามารถใช้เป็น id ใน React component
 
   return {
