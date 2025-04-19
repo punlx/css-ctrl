@@ -1,5 +1,3 @@
-
-
 -- theme.class`
 .. สร้าง global class name พร้อมใช้กับ @bind ได้ทุกที่
 
@@ -143,177 +141,46 @@ dialog.dialogPluginFadeOutClass::backdrop {
 }
 ```
 
+---
 
+```css
 
-----
-popover.ts keep
+export const amodalcss = css<{ modal: [] }>`
+  @scope app
 
+  .box {
 
-// src/plugin/popover.ts
+    option-active( ... ) <-- .app_box.listboxPlugin-optionActive {css}
+    option-selected( ... ) <-- .app_box[aria-selected="true"] {css}
+    option-unselected( ... ) <-- .app_box[aria-selected="false"] {css}
+    option-disabled( ... ) <-- .app_box[aria-disabled="true"] {css}
 
-interface PopoverProperty {
-  id: string;
-  close?: 'outside-click' | 'close-action';
-  trapFocus?: boolean;
-  fadeDuration?: number;
-}
-
-// ขยาย storage.popover เป็นรูปแบบ object
-export const popover = (options: PopoverProperty) => {
-  // อ่านค่าจาก options
-  const {
-    id,
-    close = 'close-action', // default
-    trapFocus = false,
-    fadeDuration = 300,
-  } = options;
-
-  return (storage, className) => {
-    if (!storage.popover) {
-      storage.popover = {};
+    @query :option-active { <-- .app_box .listboxPlugin-optionActive {css}
     }
 
-    if (!storage.popover.containerEl) {
-      storage.popover.containerEl = {};
+    @query :option-selected { <-- .app_box [aria-selected="true"] {css}
     }
 
-    // เพิ่มตัวแปรไว้เก็บ reference
-    storage.popover.lastActiveElement = null;
-
-    // ฟังก์ชัน helper: จัดการ focus trap
-    function handleKeydown(e: KeyboardEvent) {
-      if (!storage.popover.containerEl) return;
-      const containerEl = storage.popover.containerEl as HTMLElement;
-      // ถ้า Esc => close
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        actions.close(e);
-      }
-      // ถ้า Tab => trapFocus
-      if (e.key === 'Tab') {
-        // หา focusable elements
-        const focusables = Array.from(
-          containerEl.querySelectorAll(
-            'a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])'
-          )
-        ) as HTMLElement[];
-        if (focusables.length === 0) {
-          e.preventDefault();
-          containerEl.focus();
-          return;
-        }
-        const first = focusables[0];
-        const last = focusables[focusables.length - 1];
-        const current = document.activeElement;
-        if (!e.shiftKey && current === last) {
-          e.preventDefault();
-          first.focus();
-        } else if (e.shiftKey && current === first) {
-          e.preventDefault();
-          last.focus();
-        }
-      }
+    @query &:option-unselected { <-- .app_box [aria-selected="false"] {css}
     }
 
-    // ฟังก์ชัน helper: คลิกนอก => ปิด
-    function handleDocClick(e: MouseEvent) {
-      if (!storage.popover.containerEl) return;
-      const containerEl = storage.popover.containerEl as HTMLElement;
-      if (!containerEl.contains(e.target as Node)) {
-        actions.close(e);
-      }
+    @query &:option-disabled { <-- .app_box [aria-disabled="true"] {css}
     }
 
-    // สร้างชุด action
-    const actions = {
-      show: (e: any) => {
-        if (!storage.popover.containerEl) return;
-        const containerEl = storage.popover.containerEl as HTMLElement;
+  }
+`;
 
-        // บันทึก element ที่โฟกัสอยู่ก่อน
-        storage.popover.lastActiveElement = document.activeElement;
+```
 
-        // ใส่ animation duration ลง style inline หรือ doc
-        containerEl.style.setProperty('--popoverOpacity', `1`);
+---
 
-        // ถ้า close==='outside-click' => ผูก doc click
-        if (close === 'outside-click') {
-          document.addEventListener('mousedown', handleDocClick);
-        }
+เพิิ่ม
+willFocus
+focused
+didFocused
 
-        // ถ้า trapFocus => ผูก keydown
-        if (trapFocus) {
-          containerEl.addEventListener('keydown', handleKeydown);
-          // initial focus
-          setTimeout(() => {
-            // ถ้าพบ element ที่โฟกัสได้ => โฟกัส, ไม่งั้น focus containerEl
-            const focusable = containerEl.querySelector(
-              'a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])'
-            ) as HTMLElement;
-            if (focusable) {
-              focusable.focus();
-            } else {
-              containerEl.focus();
-            }
-          }, 0);
-        }
-      },
-      close: (e: any) => {
-        console.log('popover.ts:63 |e| : ', e);
-        if (!storage.popover.containerEl) return;
-        const containerEl = storage.popover.containerEl as HTMLElement;
+willLoad
+loaded
+didLoaded
 
-        // เอา doc click ออก
-        if (close === 'outside-click') {
-          document.removeEventListener('mousedown', handleDocClick);
-        }
-        // เอา keydown ออก
-        if (trapFocus) {
-          containerEl.removeEventListener('keydown', handleKeydown);
-        }
-        containerEl.style.setProperty('--popoverOpacity', `0`);
-
-        // คืนโฟกัส
-        if (storage.popover.lastActiveElement instanceof HTMLElement) {
-          storage.popover.lastActiveElement.focus();
-        }
-        storage.popover.lastActiveElement = null;
-      },
-    };
-
-    return {
-      popover: {
-        panel: (jsx: any) => {
-          if (!jsx) {
-            throw new Error(`ให้บอกว่า จะต้องมีการกำหนด jsx ก่อนเท่านั้น`);
-          }
-
-          // ตรวจสอบว่ามี div เดิมอยู่ใน DOM แล้วหรือยัง
-          const existing = document.getElementById(id);
-
-          const container =
-            existing ??
-            (() => {
-              const containerEl = document.createElement('div');
-              containerEl.id = id;
-              containerEl.setAttribute('role', 'dialog');
-              containerEl.setAttribute('aria-modal', 'false');
-              containerEl.tabIndex = -1;
-              containerEl.classList.add('popoverPluginFade');
-              containerEl.style.setProperty('--popoverFadeDuration', `${fadeDuration}ms`);
-              containerEl.style.setProperty('--popoverOpacity', `0`);
-
-              document.body.appendChild(containerEl);
-              storage.popover.containerEl = containerEl;
-              return containerEl;
-            })();
-
-          return storage.plugin.react.createPortal(jsx, container);
-        },
-        events: () => {},
-        actions,
-        id,
-      },
-    };
-  };
-};
+เพิ่ม listbox.actions.searchItem("data value", "substring-match" | "startsWith-match" | "fuzzy-search)

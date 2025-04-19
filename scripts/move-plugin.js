@@ -4,7 +4,7 @@ import path from 'path';
 
 const DIST = 'dist';
 const PLUGIN_DIR = path.join(DIST, 'plugin');
-const pluginFiles = ['select', 'dialog', 'popover']; // etc.
+const pluginFiles = ['listbox', 'dialog', 'popover']; // etc.
 
 for (const name of pluginFiles) {
   const dtsSrc = path.join(PLUGIN_DIR, name + '.d.ts');
@@ -26,7 +26,7 @@ for (const name of pluginFiles) {
   }
 
   // ลบไฟล์ .js เก่าใน dist/plugin ถ้าต้องการ
-  // (แต่ esbuild.config.js ได้สร้าง dist/select.js แล้ว)
+  // (แต่ esbuild.config.js ได้สร้าง dist/listbox.js แล้ว)
   const pluginJsOld = path.join(PLUGIN_DIR, name + '.js');
   if (fs.existsSync(pluginJsOld)) {
     fs.unlinkSync(pluginJsOld);

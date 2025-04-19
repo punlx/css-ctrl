@@ -28,10 +28,10 @@ async function runBuild() {
 
   // 3) bundle/minify plugin แต่ละตัว => dist/<name>.js
   for (const pluginFile of pluginJsFiles) {
-    // pluginFile เช่น 'select.js'
-    const srcPath = path.join(pluginDir, pluginFile); // dist/plugin/select.js
-    const baseName = path.basename(pluginFile, '.js'); // 'select'
-    const outPath = path.join('dist', baseName + '.js'); // dist/select.js
+    // pluginFile เช่น 'listbox.js'
+    const srcPath = path.join(pluginDir, pluginFile); // dist/plugin/listbox.js
+    const baseName = path.basename(pluginFile, '.js'); // 'listbox'
+    const outPath = path.join('dist', baseName + '.js'); // dist/listbox.js
 
     await build({
       entryPoints: [srcPath],
