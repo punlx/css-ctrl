@@ -421,6 +421,37 @@ export function popover(options: PopoverProperty) {
         popoverState._events?.willShow?.({ open: true });
         popoverState.triggerEl = e?.currentTarget || e?.target || null;
 
+        // -------------------------------
+        // [เพิ่ม] ตรวจสอบ ARIA attribute
+        // -------------------------------
+        if (popoverState.triggerEl instanceof HTMLElement) {
+          const missingAttrs: string[] = [];
+          const suggestions: string[] = [];
+
+          if (!popoverState.triggerEl.hasAttribute('aria-expanded')) {
+            missingAttrs.push('aria-expanded');
+            suggestions.push(`  aria-expanded={popoverInstance.aria.expanded}`);
+          }
+          if (!popoverState.triggerEl.hasAttribute('aria-controls')) {
+            missingAttrs.push('aria-controls');
+            suggestions.push(`  aria-controls={popoverInstance.aria.controls}`);
+          }
+          if (!popoverState.triggerEl.hasAttribute('aria-haspopup')) {
+            missingAttrs.push('aria-haspopup');
+            suggestions.push(`  aria-haspopup={popoverInstance.aria.haspopup}`);
+          }
+
+          if (missingAttrs.length > 0) {
+            console.warn(
+              `[CSS-CTRL-WARN] Missing ARIA attributes on popover: ${missingAttrs
+                .map((attr) => `"${attr}"`)
+                .join(', ')}\n\n` +
+                `Add the following to improve accessibility (A11y):\n` +
+                `${suggestions.join('\n')}`
+            );
+          }
+        }
+
         container.hidden = false;
         container.classList.remove('popoverPluginFadeOutClass');
         container.classList.add('popoverPluginFadeInClass');
