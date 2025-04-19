@@ -80,6 +80,14 @@ interface SelectEvents<T> {
   loaded?: (newData: T[]) => void;
   /** เรียกหลัง loaded อีกที (จะเรียกซ้ำข้อมูลเดิม) */
   didLoaded?: (newData: T[]) => void;
+
+  /** ----- Event ใหม่สำหรับ Search ----- */
+  /** เรียกก่อนจะเริ่ม filter (คืนค่า data ชุดเดิม หรือข้อมูลที่จะใช้ค้นหา) */
+  willSearch?: (newData: T[]) => void;
+  /** เรียกเมื่อได้ผลลัพธ์ filter แล้ว (matched items) */
+  searched?: (newData: T[]) => void;
+  /** เรียกหลัง searched อีกที (ถ้าต้องการทำงานต่อ) */
+  didSearched?: (newData: T[]) => void;
 }
 
 /** ข้อมูลสำหรับ init(...)
@@ -104,6 +112,9 @@ export interface SelectStorage<T> extends Record<string, unknown> {
     valueKey?: string;
     containerEl?: HTMLElement;
     _selectData?: T[];
+    /** ----- เพิ่ม _currentLoadedData สำหรับเก็บข้อมูลที่ “โหลดแล้ว” ----- */
+    _currentLoadedData?: T[];
+
     /** เก็บข้อมูล item ปัจจุบันที่โฟกัสหรือ active อยู่ (สำหรับ aria-activedescendant) */
     activeItemEl?: HTMLElement | null;
     /** เก็บ index ล่าสุดที่คลิก (ใช้ใน multi-select + shiftKey) */
@@ -167,6 +178,8 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       lazyState: {
         currentIndex: 0,
       },
+      // เพิ่ม field สำหรับเก็บ data ที่โหลดแล้ว
+      _currentLoadedData: [],
     },
   };
 
@@ -196,12 +209,12 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
 
     // =========== จุดสำคัญ: เช็ค role="option" + id ===========
     if (data) {
-      const elCheckId = ref.querySelector(`[id]`) as HTMLElement | null;
-      if (!elCheckId) {
-        console.info(
-          `[CSS-CTRL-INFO] Missing [id="${id}-<value>"] in container with role="listbox" despite select.listbox({ data }) configuration.`
-        );
-      }
+      // const elCheckId = ref.querySelector(`[id]`) as HTMLElement | null;
+      // if (!elCheckId) {
+      //   console.info(
+      //     `[CSS-CTRL-INFO] Missing [id="${id}-<value>"] in container with role="listbox" despite select.listbox({ data }) configuration.`
+      //   );
+      // }
       if (!valueKey) {
         throw new Error(
           `[CSS-CTRL-ERR] select.listbox({ valueKey }) is required when using select.listbox({ data }) in a container with role="listbox".`
@@ -210,12 +223,12 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         storage.select.valueKey = valueKey;
       }
     }
-    const elCheckRole = ref.querySelector(`[role="option"]`);
-    if (!elCheckRole) {
-      console.info(
-        `[CSS-CTRL-INFO] Each item within a container assigned role="listbox" must include role="option".`
-      );
-    }
+    // const elCheckRole = ref.querySelector(`[role="option"]`);
+    // if (!elCheckRole) {
+    //   console.info(
+    //     `[CSS-CTRL-INFO] Each item within a container assigned role="listbox" must include role="option".`
+    //   );
+    // }
 
     // ผูก event click
     ref.onclick = handleContainerClick;
@@ -238,6 +251,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
           doLoadNextChunk(data, lazyLoad.nextLoad);
         }
       };
+    } else {
+      // กรณีไม่มี lazyLoad หรือ data ว่าง => _currentLoadedData = data ทั้งหมด (หรือ [])
+      storage.select._currentLoadedData = data || [];
     }
     // ---------- จบส่วนของ Lazy Load ----------
   }
@@ -254,6 +270,11 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       willLoad: ev.willLoad,
       loaded: ev.loaded,
       didLoaded: ev.didLoaded,
+
+      // search
+      willSearch: ev.willSearch,
+      searched: ev.searched,
+      didSearched: ev.didSearched,
     };
   }
 
@@ -759,6 +780,8 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     if (storage.select.lazyState) {
       storage.select.lazyState.currentIndex = newData.length;
     }
+    // ----- อัปเดต _currentLoadedData เป็นข้อมูล chunk นี้ -----
+    storage.select._currentLoadedData = newData;
   }
 
   function doLoadNextChunk(fullData: T[], loadCount?: number) {
@@ -775,6 +798,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     storage.select.lazyState.currentIndex = end;
     callLazyEvent('loaded', newData);
     callLazyEvent('didLoaded', newData);
+
+    // ----- รวม chunk ใหม่เข้ากับ _currentLoadedData -----
+    storage.select._currentLoadedData = [...(storage.select._currentLoadedData || []), ...newData];
   }
 
   /**
@@ -788,7 +814,44 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       cb(data);
     }
   }
-  // ---------- จบฟังก์ชัน Lazy Load ----------
+  // ---------- จบส่วนของ Lazy Load ----------
+
+  // ---------- ฟังก์ชันช่วยสำหรับ Search ----------
+
+  /** ฟังก์ชันสำหรับเรียก event ที่เกี่ยวกับ "Search" */
+  function callSearchEvent(name: 'willSearch' | 'searched' | 'didSearched', data: T[]) {
+    const cb = storage.select._events[name];
+    if (cb) {
+      cb(data);
+    }
+  }
+
+  /**
+   * searchItem(query, mode) => คืนค่าข้อมูล filtered (case-insensitive + trim)
+   * เปลี่ยนให้ใช้ _selectData (ข้อมูลเต็ม) เพื่อให้แม้ยังไม่ scroll ก็หาเจอ
+   */
+  function searchItem(query: string, matchMode: 'substring-match' | 'startsWith-match') {
+    // *** โค้ดใหม่: ใช้ _selectData (ข้อมูลเต็ม) ***
+    const fullData = storage.select._selectData || [];
+    callSearchEvent('willSearch', fullData);
+
+    const keyword = query.trim().toLowerCase();
+    let filtered = fullData;
+    if (keyword) {
+      filtered = fullData.filter((item) => {
+        const text = (item.display || '').toString().toLowerCase();
+        if (matchMode === 'startsWith-match') {
+          return text.startsWith(keyword);
+        }
+        return text.includes(keyword);
+      });
+    }
+
+    callSearchEvent('searched', filtered);
+    callSearchEvent('didSearched', filtered);
+
+    return filtered;
+  }
 
   // 3) return object (public API)
   return {
@@ -801,6 +864,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       unSelectAll,
       getValues,
       focusItem,
+      searchItem, // เพิ่มเมธอด searchItem ลงใน actions
     },
     aria: {
       id: (val: string) => {

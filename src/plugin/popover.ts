@@ -585,7 +585,3 @@ export function popover(options: PopoverProperty) {
   // ===== กลับ: เนื่องจากผู้ใช้ต้องการ .panel, .events, .actions => return api.popover
   return api;
 }
-
-// const a = popover({ id });
-
-// a.aria;
