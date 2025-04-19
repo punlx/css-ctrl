@@ -5,6 +5,14 @@ interface DataItem {
   [key: string]: any;
 }
 
+/** ข้อมูล config สำหรับ Lazy Load */
+interface LazyLoadOptions {
+  /** จำนวน item แรกที่จะ load */
+  firstLoad?: number;
+  /** จำนวน item ต่อ ๆ ไปที่จะ load */
+  nextLoad?: number;
+}
+
 /** ตัวเลือกตั้งต้นของ select plugin */
 interface SelectOptions {
   id: string;
@@ -27,6 +35,13 @@ interface SelectOptions {
    * ถ้าไม่กำหนด จะเป็น 'auto'
    */
   scrollBehavior?: ScrollBehavior;
+
+  /**
+   * ตัวเลือกสำหรับ Lazy Load
+   * firstLoad => จำนวนที่จะ load รอบแรก
+   * nextLoad => จำนวนที่จะ load รอบถัดไป เมื่อ scroll ถึงล่างสุด
+   */
+  lazyLoad?: LazyLoadOptions;
 }
 
 /** โครงสร้างเก็บ item ที่ select */
@@ -49,6 +64,16 @@ interface SelectEvents {
   didSelect?: (info: SelectCallbackInfo) => void;
   unSelect?: (info: SelectCallbackInfo) => void;
   reSelect?: (info: SelectCallbackInfo) => void;
+
+  /** ----- Event ใหม่สำหรับ Lazy Load ----- */
+  /** เรียกครั้งแรกตอน mount หรือ init ส่วนของ lazyLoad */
+  firstLoad?: (newData: DataItem[]) => void;
+  /** เรียกเมื่อ scroll ถึงล่างสุดก่อน load ถัดไป */
+  willLoad?: (newData: DataItem[]) => void;
+  /** เรียกหลังจากโหลดเพิ่มเสร็จ (ต่อจาก willLoad) */
+  loaded?: (newData: DataItem[]) => void;
+  /** เรียกหลัง loaded อีกที (จะเรียกซ้ำข้อมูลเดิม) */
+  didLoaded?: (newData: DataItem[]) => void;
 }
 
 /** ข้อมูลสำหรับ init(...) */
@@ -72,6 +97,12 @@ export interface SelectStorage extends Record<string, unknown> {
     activeItemEl?: HTMLElement | null;
     /** เก็บ index ล่าสุดที่คลิก (ใช้ใน multi-select + shiftKey) */
     lastIndexClicked: number | null;
+
+    /** ----- State สำหรับ Lazy Load ----- */
+    /** เก็บค่าที่เกี่ยวกับ lazyLoad เช่น currentIndex */
+    lazyState?: {
+      currentIndex: number; // เก็บจำนวน item ที่ load ไปแล้ว
+    };
   };
 }
 
@@ -84,6 +115,7 @@ export interface SelectStorage extends Record<string, unknown> {
  * - รองรับ shift+click / ctrl+click ในโหมด multi หรือ single-then-multi (ที่เปลี่ยนเป็น multi)
  * - มี focusItem() เรียกโฟกัส item ใดๆ โดยไม่ select
  * - เพิ่ม autoScroll + scrollBehavior เพื่อเลื่อน scrollIntoView
+ * - เพิ่ม lazyLoad (firstLoad / nextLoad) + event firstLoad, willLoad, loaded, didLoaded
  */
 export function listbox(options: SelectOptions) {
   // ตั้งค่า default หากไม่ได้ส่งมา
@@ -93,6 +125,7 @@ export function listbox(options: SelectOptions) {
     type = 'single-select',
     autoScroll = true,
     scrollBehavior = 'auto',
+    lazyLoad,
   } = options;
 
   // ภายในเราจะเก็บ selectMode = 'single' | 'multi'
@@ -118,6 +151,10 @@ export function listbox(options: SelectOptions) {
       unselectAllowed: false,
       activeItemEl: null,
       lastIndexClicked: null,
+      // สำหรับ lazy load
+      lazyState: {
+        currentIndex: 0,
+      },
     },
   };
 
@@ -149,8 +186,8 @@ export function listbox(options: SelectOptions) {
     if (data) {
       const elCheckId = ref.querySelector(`[id]`) as HTMLElement | null;
       if (!elCheckId) {
-        throw new Error(
-          `[CSS-CTRL-ERR] Missing [id="${id}-<value>"] in container with role="listbox" despite select.listbox({ data }) configuration.`
+        console.info(
+          `[CSS-CTRL-INFO] Missing [id="${id}-<value>"] in container with role="listbox" despite select.listbox({ data }) configuration.`
         );
       }
       if (!valueKey) {
@@ -163,8 +200,8 @@ export function listbox(options: SelectOptions) {
     }
     const elCheckRole = ref.querySelector(`[role="option"]`);
     if (!elCheckRole) {
-      throw new Error(
-        `[CSS-CTRL-ERR] Each item within a container assigned role="listbox" must include role="option".`
+      console.info(
+        `[CSS-CTRL-INFO] Each item within a container assigned role="listbox" must include role="option".`
       );
     }
 
@@ -173,6 +210,24 @@ export function listbox(options: SelectOptions) {
 
     // ผูก event keydown (เพื่อรองรับ keyboard navigation + aria-activedescendant)
     ref.onkeydown = handleKeyDown;
+
+    // ---------- เริ่มส่วนของ Lazy Load ----------
+    // ถ้ามี lazyLoad และมี data ให้ plugin ช่วย slice
+    if (lazyLoad && data && data.length) {
+      // load ก้อนแรก
+      doFirstLoad(data, lazyLoad.firstLoad);
+
+      // ผูก event scroll
+      ref.onscroll = (evt) => {
+        const el = evt.target as HTMLElement;
+        // เช็คว่า scroll ถึงล่างสุดหรือไม่
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight) {
+          // โหลด chunk ถัดไป
+          doLoadNextChunk(data, lazyLoad.nextLoad);
+        }
+      };
+    }
+    // ---------- จบส่วนของ Lazy Load ----------
   }
 
   function events(ev: SelectEvents) {
@@ -182,6 +237,11 @@ export function listbox(options: SelectOptions) {
       didSelect: ev.didSelect,
       unSelect: ev.unSelect,
       reSelect: ev.reSelect,
+      // lazy load
+      firstLoad: ev.firstLoad,
+      willLoad: ev.willLoad,
+      loaded: ev.loaded,
+      didLoaded: ev.didLoaded,
     };
   }
 
@@ -191,6 +251,8 @@ export function listbox(options: SelectOptions) {
     if (!ref) return;
     ref.onclick = null;
     ref.onkeydown = null;
+    // ลบ onscroll ด้วย
+    ref.onscroll = null;
     // เคลียร์ state
     storage.select.activeItemEl = null;
     storage.select.selectedItems = [];
@@ -314,6 +376,7 @@ export function listbox(options: SelectOptions) {
   function callEvent(name: keyof SelectEvents, el: HTMLElement) {
     const cb = storage.select._events[name];
     if (cb) {
+      // @ts-ignore
       cb(buildInfo(el));
     }
   }
@@ -479,7 +542,7 @@ export function listbox(options: SelectOptions) {
     container.focus();
   }
 
-  /** ฟังก์ชัน unSelectByItem(val) */
+  /** ฟังก์ชัน unSelectByItem(val: string) */
   function unSelectByItem(val: string) {
     const container = storage.select.containerEl;
     if (!container) {
@@ -639,6 +702,45 @@ export function listbox(options: SelectOptions) {
     scrollToItem(el);
     container.focus();
   }
+
+  // ---------- ฟังก์ชันช่วยสำหรับ Lazy Load ----------
+  function doFirstLoad(fullData: DataItem[], loadCount?: number) {
+    const count = loadCount || fullData.length;
+    const newData = fullData.slice(0, count);
+    // เรียก event firstLoad
+    callLazyEvent('firstLoad', newData);
+    // เก็บ currentIndex
+    if (storage.select.lazyState) {
+      storage.select.lazyState.currentIndex = newData.length;
+    }
+  }
+
+  function doLoadNextChunk(fullData: DataItem[], loadCount?: number) {
+    if (!storage.select.lazyState) return;
+    const start = storage.select.lazyState.currentIndex;
+    if (start >= fullData.length) {
+      return; // load ครบแล้ว
+    }
+    const count = loadCount || fullData.length - start;
+    const end = start + count;
+    const newData = fullData.slice(start, end);
+
+    callLazyEvent('willLoad', newData);
+    storage.select.lazyState.currentIndex = end;
+    callLazyEvent('loaded', newData);
+    callLazyEvent('didLoaded', newData);
+  }
+
+  function callLazyEvent(
+    name: 'firstLoad' | 'willLoad' | 'loaded' | 'didLoaded',
+    data: DataItem[]
+  ) {
+    const cb = storage.select._events[name];
+    if (cb) {
+      cb(data);
+    }
+  }
+  // ---------- จบฟังก์ชัน Lazy Load ----------
 
   // 3) return object (public API)
   return {
