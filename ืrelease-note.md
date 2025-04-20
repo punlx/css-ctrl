@@ -145,7 +145,7 @@ dialog.dialogPluginFadeOutClass::backdrop {
 
 ```css
 
-export const amodalcss = css<{ modal: [] }>`
+export const appcss = css<{ modal: [] }>`
   @scope app
 
   .box {
@@ -171,19 +171,6 @@ export const amodalcss = css<{ modal: [] }>`
 `;
 
 ```
-
----
-
-เพิิ่ม
-willFocus
-focused
-didFocused
-
-willLoad
-loaded
-didLoaded
-
-เพิ่ม listbox.actions.searchItem("data value", "substring-match" | "startsWith-match" | "fuzzy-search")
 
 ---
 

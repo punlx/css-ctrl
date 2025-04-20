@@ -88,6 +88,11 @@ interface SelectEvents<T> {
   searched?: (newData: T[]) => void;
   /** เรียกหลัง searched อีกที (ถ้าต้องการทำงานต่อ) */
   didSearched?: (newData: T[]) => void;
+
+  /** ----- Event ใหม่สำหรับ Focus ----- */
+  willFocus?: (info: SelectCallbackInfo<T>) => void;
+  focused?: (info: SelectCallbackInfo<T>) => void;
+  didFocus?: (info: SelectCallbackInfo<T>) => void;
 }
 
 /** ข้อมูลสำหรับ init(...)
@@ -209,12 +214,6 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
 
     // =========== จุดสำคัญ: เช็ค role="option" + id ===========
     if (data) {
-      // const elCheckId = ref.querySelector(`[id]`) as HTMLElement | null;
-      // if (!elCheckId) {
-      //   console.info(
-      //     `[CSS-CTRL-INFO] Missing [id="${id}-<value>"] in container with role="listbox" despite select.listbox({ data }) configuration.`
-      //   );
-      // }
       if (!valueKey) {
         throw new Error(
           `[CSS-CTRL-ERR] select.listbox({ valueKey }) is required when using select.listbox({ data }) in a container with role="listbox".`
@@ -223,12 +222,6 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         storage.select.valueKey = valueKey;
       }
     }
-    // const elCheckRole = ref.querySelector(`[role="option"]`);
-    // if (!elCheckRole) {
-    //   console.info(
-    //     `[CSS-CTRL-INFO] Each item within a container assigned role="listbox" must include role="option".`
-    //   );
-    // }
 
     // ผูก event click
     ref.onclick = handleContainerClick;
@@ -275,6 +268,11 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       willSearch: ev.willSearch,
       searched: ev.searched,
       didSearched: ev.didSearched,
+
+      // focus
+      willFocus: ev.willFocus,
+      focused: ev.focused,
+      didFocus: ev.didFocus,
     };
   }
 
@@ -313,18 +311,25 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       if (evt.shiftKey) {
         // SHIFT+Click => select ช่วง range
         doSelectRange(el);
+        // เรียก event focus
+        callFocusEvent('willFocus', el);
         storage.select.activeItemEl = el;
+        callFocusEvent('focused', el);
         updateAriaActiveDescendant();
         scrollToItem(el);
+        callFocusEvent('didFocus', el);
         storage.select.lastIndexClicked = getIndexOf(el);
         storage.select.containerEl?.focus();
         return;
       } else if (evt.ctrlKey || evt.metaKey) {
         // CTRL+Click => toggle เฉพาะตัวนี้
         doToggleItem(el);
+        callFocusEvent('willFocus', el);
         storage.select.activeItemEl = el;
+        callFocusEvent('focused', el);
         updateAriaActiveDescendant();
         scrollToItem(el);
+        callFocusEvent('didFocus', el);
         storage.select.lastIndexClicked = getIndexOf(el);
         storage.select.containerEl?.focus();
         return;
@@ -332,9 +337,12 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         // คลิกปกติ => single
         callSelectEvent('willSelect', el);
         doSingleSelectLogic(el);
+        callFocusEvent('willFocus', el);
         storage.select.activeItemEl = el;
+        callFocusEvent('focused', el);
         updateAriaActiveDescendant();
         scrollToItem(el);
+        callFocusEvent('didFocus', el);
         storage.select.lastIndexClicked = getIndexOf(el);
         storage.select.containerEl?.focus();
         return;
@@ -346,18 +354,24 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       if (evt.shiftKey) {
         // SHIFT+Click => select ช่วง range
         doSelectRange(el);
+        callFocusEvent('willFocus', el);
         storage.select.activeItemEl = el;
+        callFocusEvent('focused', el);
         updateAriaActiveDescendant();
         scrollToItem(el);
+        callFocusEvent('didFocus', el);
         storage.select.containerEl?.focus();
         return;
       }
       if (evt.ctrlKey || evt.metaKey) {
         // CTRL+Click => toggle เฉพาะตัวนี้
         doToggleItem(el);
+        callFocusEvent('willFocus', el);
         storage.select.activeItemEl = el;
+        callFocusEvent('focused', el);
         updateAriaActiveDescendant();
         scrollToItem(el);
+        callFocusEvent('didFocus', el);
         storage.select.lastIndexClicked = getIndexOf(el);
         storage.select.containerEl?.focus();
         return;
@@ -372,9 +386,12 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       // multi แต่ไม่มี shift/ctrl => ก็ select item เดี่ยวๆ (ไม่ clear ของเก่า)
       doToggleItemWithoutUnselectOthers(el);
     }
+    callFocusEvent('willFocus', el);
     storage.select.activeItemEl = el;
+    callFocusEvent('focused', el);
     updateAriaActiveDescendant();
     scrollToItem(el);
+    callFocusEvent('didFocus', el);
     storage.select.lastIndexClicked = getIndexOf(el);
     storage.select.containerEl?.focus();
   }
@@ -388,6 +405,17 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     name: 'willSelect' | 'select' | 'didSelect' | 'unSelect' | 'reSelect',
     el: HTMLElement
   ) {
+    const cb = storage.select._events[name];
+    if (cb) {
+      const info = buildInfo(el);
+      cb(info);
+    }
+  }
+
+  /** ฟังก์ชันใหม่สำหรับเรียก event ที่เกี่ยวกับ "Focus"
+   * ได้แก่ willFocus, focused, didFocus
+   */
+  function callFocusEvent(name: 'willFocus' | 'focused' | 'didFocus', el: HTMLElement) {
     const cb = storage.select._events[name];
     if (cb) {
       const info = buildInfo(el);
@@ -603,10 +631,15 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     } else {
       doToggleItemWithoutUnselectOthers(el);
     }
+
+    callFocusEvent('willFocus', el);
     storage.select.activeItemEl = el;
-    storage.select.lastIndexClicked = getIndexOf(el);
+    callFocusEvent('focused', el);
     updateAriaActiveDescendant();
     scrollToItem(el);
+    callFocusEvent('didFocus', el);
+
+    storage.select.lastIndexClicked = getIndexOf(el);
     container.focus();
   }
 
@@ -727,10 +760,15 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         }
       }
     }
+
+    callFocusEvent('willFocus', items[idx]);
     storage.select.activeItemEl = items[idx];
-    storage.select.lastIndexClicked = idx;
+    callFocusEvent('focused', items[idx]);
     updateAriaActiveDescendant();
     scrollToItem(items[idx]);
+    callFocusEvent('didFocus', items[idx]);
+
+    storage.select.lastIndexClicked = idx;
   }
 
   /** moveFocusTo(index) => ไปยัง index เป้าหมาย (ข้าม disabled) */
@@ -744,10 +782,15 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       moveFocus(1);
       return;
     }
+
+    callFocusEvent('willFocus', items[index]);
     storage.select.activeItemEl = items[index];
-    storage.select.lastIndexClicked = index;
+    callFocusEvent('focused', items[index]);
     updateAriaActiveDescendant();
     scrollToItem(items[index]);
+    callFocusEvent('didFocus', items[index]);
+
+    storage.select.lastIndexClicked = index;
   }
 
   /** moveFocusToLast() => item สุดท้าย (ถ้า disabled => วนถอยหลัง) */
@@ -764,10 +807,15 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     const el = container.querySelector(`[role="option"][id="${id}-${val}"]`) as HTMLElement | null;
     if (!el) return;
     if (isDisabled(el)) return;
+
+    callFocusEvent('willFocus', el);
     storage.select.activeItemEl = el;
-    storage.select.lastIndexClicked = getIndexOf(el);
+    callFocusEvent('focused', el);
     updateAriaActiveDescendant();
     scrollToItem(el);
+    callFocusEvent('didFocus', el);
+
+    storage.select.lastIndexClicked = getIndexOf(el);
     container.focus();
   }
 
