@@ -424,6 +424,36 @@ export function popover(options: PopoverProperty) {
           // เมื่อเมาส์ออกจาก container popover -> เรียก close
           api.actions.close(evt);
         });
+
+        // =============== [เพิ่ม Focus/Blur เพื่อ A11y คีย์บอร์ด] ===============
+        // รอให้ DOM มีแล้ว เราลองหา trigger โดยระบุ [aria-controls="controls"]
+        // ถ้าเจอ => ผูก focus/blur ให้เรียก show/close อัตโนมัติ
+        requestAnimationFrame(() => {
+          const possibleTrigger = document.querySelector<HTMLElement>(
+            `[aria-controls="${controls}"]`
+          );
+          if (possibleTrigger) {
+            // เก็บไว้ใน popoverState.triggerEl ด้วย
+            popoverState.triggerEl = possibleTrigger;
+
+            // เมื่อ focus เข้า trigger => แสดง tooltip
+            possibleTrigger.addEventListener('focus', (e) => {
+              // ถ้ายังไม่ open => show
+              if (!popoverState.open) {
+                api.actions.show(e);
+              }
+            });
+
+            // เมื่อ blur ออกจาก trigger => ปิด tooltip
+            // (แต่ถ้ายัง hover อยู่บน tooltip container => เช็คใน close() อยู่แล้ว)
+            possibleTrigger.addEventListener('blur', (e) => {
+              // ถ้าเปิดอยู่ => close
+              if (popoverState.open) {
+                api.actions.close(e);
+              }
+            });
+          }
+        });
       }
       // ===================== [จบการเพิ่ม] =====================
 
@@ -470,7 +500,9 @@ export function popover(options: PopoverProperty) {
         }
 
         popoverState._events?.willShow?.({ open: true });
-        popoverState.triggerEl = e?.currentTarget || e?.target || null;
+        // ถ้า actions.show(e) เรียกพร้อม e => เก็บเป็น triggerEl
+        // (ถ้าต้องการ override ตัวที่ได้จาก querySelector ก็ได้)
+        popoverState.triggerEl = e?.currentTarget || e?.target || popoverState.triggerEl || null;
 
         // -------------------------------
         // [เพิ่ม] ตรวจสอบ ARIA attribute
@@ -693,7 +725,7 @@ export function popover(options: PopoverProperty) {
           };
 
           container.addEventListener('animationend', handleAnimationEnd, { once: true });
-        }, 125); // ดีเลย์ 80ms กัน mouseenter กลับมา
+        }, 125); // ดีเลย์ 125ms กัน mouseenter กลับมา หรือปรับตามใจ
       },
 
       closeAll() {
