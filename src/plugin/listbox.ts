@@ -358,6 +358,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         storage.select.activeItemEl = el;
         updateAriaActiveDescendant();
         scrollToItem(el);
+        storage.select.lastIndexClicked = getIndexOf(el);
         storage.select.containerEl?.focus();
         return;
       }
@@ -867,10 +868,28 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       searchItem, // เพิ่มเมธอด searchItem ลงใน actions
     },
     aria: {
-      id: (val: string) => {
-        return `${id}-${val}`;
+      /**
+       * เปลี่ยนจากรับ (val: string) => { ... }
+       * มาเป็น (item: T) => { ... } เพื่อให้ภายนอกส่ง item มาตรง ๆ ได้เลย
+       */
+      option: (item: T) => {
+        // 1) ใช้ valueKey ดึงค่าจาก item
+        if (!storage.select.valueKey) {
+          throw new Error(`[CSS-CTRL-ERR] No valueKey specified, can't generate id from item.`);
+        }
+        const extracted = extractValueByPath(item, storage.select.valueKey);
+        const itemVal = extracted == null ? '' : String(extracted);
+
+        // 2) สร้าง id ตาม prefix + '-' + itemVal
+        const finalId = `${id}-${itemVal}`;
+
+        // ตัวอย่าง: ถ้าใน item มีฟิลด์ disabled = true ก็จะกำหนด aria-disabled="true"
+
+        return {
+          id: finalId,
+          role: 'option',
+        };
       },
-      role: 'option',
     },
   };
 }

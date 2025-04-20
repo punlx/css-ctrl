@@ -18,6 +18,25 @@ react: {createRoot}
 ให้ generate css แบบนั้นใน css-ctrl.theme.css ด้วย
 
 ```css
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e1e1e; /* สีพื้นหลังของ scrollbar track */
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #555; /* สีของแท่ง scrollbar */
+  border-radius: 4px;
+  border: 2px solid #1e1e1e; /* ขอบให้เข้ากับ track */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #777;
+}
+
 dialog:-internal-dialog-in-top-layer {
   max-width: 100%;
   max-height: var(--dialogInternalPluginMaxHeight);
@@ -59,25 +78,6 @@ dialog.dialogPluginFadeOutClass {
     opacity: 0;
     transform: var(--dialogPluginFadeScale);
   }
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #1e1e1e; /* สีพื้นหลังของ scrollbar track */
-}
-
-::-webkit-scrollbar-thumb {
-  background-color: #555; /* สีของแท่ง scrollbar */
-  border-radius: 4px;
-  border: 2px solid #1e1e1e; /* ขอบให้เข้ากับ track */
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background-color: #777;
 }
 
 dialog[open]::backdrop {
@@ -184,7 +184,6 @@ loaded
 didLoaded
 
 เพิ่ม listbox.actions.searchItem("data value", "substring-match" | "startsWith-match" | "fuzzy-search")
-
 
 ---
 

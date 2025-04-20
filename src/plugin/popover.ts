@@ -35,9 +35,11 @@ interface PopoverAPI {
     closeAll(): void;
   };
   aria: {
-    controls: string;
-    haspopup: 'dialog' | 'menu' | 'tree' | 'grid' | 'listbox';
-    expanded: boolean;
+    trigger: {
+      'aria-controls': string;
+      'aria-haspopup': 'dialog' | 'menu' | 'tree' | 'grid' | 'listbox';
+      'aria-expanded': boolean;
+    };
   };
 }
 
@@ -359,9 +361,11 @@ export function popover(options: PopoverProperty) {
   // ===== สร้าง PopoverAPI ในรูปเดียวกับ plugin
   const api: PopoverAPI = {
     aria: {
-      controls: controls,
-      haspopup: hashPopup[type],
-      expanded: false,
+      trigger: {
+        'aria-controls': controls,
+        'aria-haspopup': hashPopup[type],
+        'aria-expanded': false,
+      },
     },
     panel(jsx: any) {
       let container = document.getElementById(controls);

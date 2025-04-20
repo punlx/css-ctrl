@@ -365,8 +365,12 @@ export function dialog(options: DialogPluginOptions) {
     events,
     // ส่งออก aria.heading ให้ใช้งานได้
     aria: {
-      heading: `${id}-${heading}`,
-      describe: `${id}-${describe}`,
+      heading: {
+        id: `${id}-${heading}`,
+      },
+      describe: {
+        id: `${id}-${describe}`,
+      },
     },
   };
 }
