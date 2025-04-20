@@ -61,6 +61,10 @@ interface SelectCallbackInfo<T> {
   list: Array<{ value: T | null; target: HTMLElement }>;
   /** เพิ่ม listValue สำหรับคืนค่ารายการทั้งหมดที่ถูก select */
   listValue: T[];
+  /** เพิ่ม keyValues สำหรับ map key -> T[] */
+  keyValues: {
+    [value: string]: T[];
+  };
 }
 
 /** 5 callback ใน events(...) + Lazy Load 4 ตัว
@@ -475,6 +479,19 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       .map((s) => s.dataItem)
       .filter(Boolean) as T[];
 
+    // สร้าง keyValues: [string]: T[]
+    // ใช้คีย์จาก extractValueByPath(item, storage.select.valueKey)
+    const keyMap: { [value: string]: T[] } = {};
+    for (const item of selectedArray) {
+      if (!storage.select.valueKey) continue; // fallback
+      const extracted = extractValueByPath(item, storage.select.valueKey);
+      const k = String(extracted);
+      if (!keyMap[k]) {
+        keyMap[k] = [];
+      }
+      keyMap[k].push(item);
+    }
+
     return {
       value: findDataItem(el),
       target: el,
@@ -483,6 +500,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         target: s.el,
       })),
       listValue: selectedArray,
+      keyValues: keyMap,
     };
   }
 
