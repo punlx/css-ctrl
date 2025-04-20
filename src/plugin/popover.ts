@@ -85,11 +85,11 @@ interface PopoverProperty {
   initialFocus?: string;
 
   // อนุญาต vertical,horizontal = undefined ได้
-  anchorOrigin?: {
+  anchor?: {
     vertical?: 'top' | 'center' | 'bottom' | undefined;
     horizontal?: 'left' | 'center' | 'right' | undefined;
   };
-  transformOrigin?: {
+  transform?: {
     vertical?: 'top' | 'center' | 'bottom' | undefined;
     horizontal?: 'left' | 'center' | 'right' | undefined;
   };
@@ -118,22 +118,22 @@ interface PopoverProperty {
 function computeAnchorAndTransform(
   triggerRect: DOMRect,
   popRect: DOMRect,
-  anchorOrigin: {
+  anchor: {
     vertical?: 'top' | 'center' | 'bottom' | undefined;
     horizontal?: 'left' | 'center' | 'right' | undefined;
   },
-  transformOrigin: {
+  transform: {
     vertical?: 'top' | 'center' | 'bottom' | undefined;
     horizontal?: 'left' | 'center' | 'right' | undefined;
   },
   offsetX: number,
   offsetY: number
 ) {
-  const aoV = anchorOrigin.vertical ?? 'bottom';
-  const aoH = anchorOrigin.horizontal ?? 'left';
+  const aoV = anchor.vertical ?? 'bottom';
+  const aoH = anchor.horizontal ?? 'left';
 
-  const toV = transformOrigin.vertical ?? 'top';
-  const toH = transformOrigin.horizontal ?? 'left';
+  const toV = transform.vertical ?? 'top';
+  const toH = transform.horizontal ?? 'left';
 
   let yA = 0;
   if (aoV === 'top') {
@@ -187,7 +187,7 @@ function flipCenterHorizontal(
       t.horizontal = 'right';
     }
   }
-  return { anchorOrigin: a, transformOrigin: t };
+  return { anchor: a, transform: t };
 }
 
 // flipCenterVertical
@@ -210,7 +210,7 @@ function flipCenterVertical(
       t.vertical = 'bottom';
     }
   }
-  return { anchorOrigin: a, transformOrigin: t };
+  return { anchor: a, transform: t };
 }
 
 function isOutOfViewport(r: DOMRect) {
@@ -223,11 +223,11 @@ function isOutOfViewport(r: DOMRect) {
 function positionPopoverAutoFlip(
   triggerEl: HTMLElement,
   containerEl: HTMLElement,
-  anchorOrigin: {
+  anchor: {
     vertical?: 'top' | 'center' | 'bottom';
     horizontal?: 'left' | 'center' | 'right';
   },
-  transformOrigin: {
+  transform: {
     vertical?: 'top' | 'center' | 'bottom';
     horizontal?: 'left' | 'center' | 'right';
   },
@@ -261,17 +261,13 @@ function positionPopoverAutoFlip(
     return containerEl.getBoundingClientRect();
   }
 
-  let rect = doPosition(anchorOrigin, transformOrigin);
+  let rect = doPosition(anchor, transform);
   if (!flip) return;
 
   if (!isOutOfViewport(rect)) return;
 
-  let { anchorOrigin: a2, transformOrigin: t2 } = flipCenterHorizontal(
-    anchorOrigin,
-    transformOrigin,
-    rect
-  );
-  ({ anchorOrigin: a2, transformOrigin: t2 } = flipCenterVertical(a2, t2, rect));
+  let { anchor: a2, transform: t2 } = flipCenterHorizontal(anchor, transform, rect);
+  ({ anchor: a2, transform: t2 } = flipCenterVertical(a2, t2, rect));
   rect = doPosition(a2, t2);
   if (!isOutOfViewport(rect)) return;
 
@@ -335,8 +331,8 @@ export function popover(options: PopoverProperty) {
     close = 'close-action',
     trapFocus = true,
     initialFocus,
-    anchorOrigin = { vertical: 'bottom', horizontal: 'left' },
-    transformOrigin = { vertical: 'top', horizontal: 'left' },
+    anchor = { vertical: 'bottom', horizontal: 'left' },
+    transform = { vertical: 'top', horizontal: 'left' },
     offsetX = 0,
     offsetY = 0,
     flip = true,
@@ -443,10 +439,10 @@ export function popover(options: PopoverProperty) {
 
           if (missingAttrs.length > 0) {
             console.warn(
-              `[CSS-CTRL-WARN] Missing ARIA attributes on popover: ${missingAttrs
+              `[CSS-CTRL-WARN] Missing ARIA attributes on trigger element: ${missingAttrs
                 .map((attr) => `"${attr}"`)
                 .join(', ')}\n\n` +
-                `Add the following to improve accessibility (A11y):\n` +
+                `To ensure accessibility (A11y), add a trigger like:\n` +
                 `${suggestions.join('\n')}`
             );
           }
@@ -501,8 +497,8 @@ export function popover(options: PopoverProperty) {
             positionPopoverAutoFlip(
               popoverState.triggerEl!,
               container,
-              anchorOrigin,
-              transformOrigin,
+              anchor,
+              transform,
               offsetX,
               offsetY,
               flip,
@@ -524,8 +520,8 @@ export function popover(options: PopoverProperty) {
             positionPopoverAutoFlip(
               popoverState.triggerEl,
               container,
-              anchorOrigin,
-              transformOrigin,
+              anchor,
+              transform,
               offsetX,
               offsetY,
               flip,
