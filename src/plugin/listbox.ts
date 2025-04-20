@@ -796,14 +796,18 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     }
   }
 
+  /**
+   * แก้ไขตรงนี้ให้ search เฉพาะ _currentLoadedData
+   * เดิมเป็น fullData = storage.select._selectData || [];
+   */
   function searchItem(query: string, matchMode: 'substring' | 'startsWith') {
-    const fullData = storage.select._selectData || [];
-    callSearchEvent('willSearch', fullData);
+    const loadedData = storage.select._currentLoadedData || [];
+    callSearchEvent('willSearch', loadedData);
 
     const keyword = query.trim().toLowerCase();
-    let filtered = fullData;
+    let filtered = loadedData;
     if (keyword) {
-      filtered = fullData.filter((item) => {
+      filtered = loadedData.filter((item) => {
         const text = (item.display || '').toString().toLowerCase();
         if (matchMode === 'startsWith') {
           return text.startsWith(keyword);
