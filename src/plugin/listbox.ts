@@ -59,6 +59,8 @@ interface SelectCallbackInfo<T> {
   value: T | null;
   target: HTMLElement;
   list: Array<{ value: T | null; target: HTMLElement }>;
+  /** เพิ่ม listValue สำหรับคืนค่ารายการทั้งหมดที่ถูก select */
+  listValue: T[];
 }
 
 /** 5 callback ใน events(...) + Lazy Load 4 ตัว
@@ -468,6 +470,11 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
   }
 
   function buildInfo(el: HTMLElement) {
+    // ดึงรายการทั้งหมดที่ถูก select ไว้ (T[]) เพื่อใส่ลงใน listValue
+    const selectedArray = storage.select.selectedItems
+      .map((s) => s.dataItem)
+      .filter(Boolean) as T[];
+
     return {
       value: findDataItem(el),
       target: el,
@@ -475,6 +482,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         value: s.dataItem,
         target: s.el,
       })),
+      listValue: selectedArray,
     };
   }
 
