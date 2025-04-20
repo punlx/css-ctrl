@@ -1,4 +1,6 @@
-// src/plugin/popover.ts
+// ======================
+// popover.ts (ฉบับสมบูรณ์)
+// ======================
 
 import { createPortal } from 'react-dom';
 
@@ -37,8 +39,9 @@ interface PopoverAPI {
   aria: {
     trigger: {
       'aria-controls': string;
-      'aria-haspopup': 'dialog' | 'menu' | 'tree' | 'grid' | 'listbox';
+      'aria-haspopup': 'dialog' | 'menu' | 'tree' | 'grid' | 'listbox' | 'false';
       'aria-expanded': boolean;
+      tabIndex?: number;
     };
   };
 }
@@ -74,26 +77,26 @@ function enableFocusTrap(el: HTMLElement): () => void {
   };
 }
 
-type PopoverTypes = 'dropdown' | 'listbox' | 'treeview' | 'grid' | 'modal';
+// เพิ่ม 'tooltip' เข้าไปด้วย
+type PopoverTypes = 'dropdown' | 'listbox' | 'treeview' | 'grid' | 'modal' | 'tooltip';
+
 // ======================
 // ประกาศ Options
 // ======================
 interface PopoverProperty {
-  // TODO cache global ต้องไม่ซ้ำกับคนอื่น
   controls: string;
   type: PopoverTypes;
   close?: 'outside-click' | 'close-action';
   trapFocus?: boolean;
   initialFocus?: string;
 
-  // อนุญาต vertical,horizontal = undefined ได้
   anchor?: {
-    vertical?: 'top' | 'center' | 'bottom' | undefined;
-    horizontal?: 'left' | 'center' | 'right' | undefined;
+    vertical?: 'top' | 'center' | 'bottom';
+    horizontal?: 'left' | 'center' | 'right';
   };
   transform?: {
-    vertical?: 'top' | 'center' | 'bottom' | undefined;
-    horizontal?: 'left' | 'center' | 'right' | undefined;
+    vertical?: 'top' | 'center' | 'bottom';
+    horizontal?: 'left' | 'center' | 'right';
   };
 
   offsetX?: number;
@@ -121,12 +124,12 @@ function computeAnchorAndTransform(
   triggerRect: DOMRect,
   popRect: DOMRect,
   anchor: {
-    vertical?: 'top' | 'center' | 'bottom' | undefined;
-    horizontal?: 'left' | 'center' | 'right' | undefined;
+    vertical?: 'top' | 'center' | 'bottom';
+    horizontal?: 'left' | 'center' | 'right';
   },
   transform: {
-    vertical?: 'top' | 'center' | 'bottom' | undefined;
-    horizontal?: 'left' | 'center' | 'right' | undefined;
+    vertical?: 'top' | 'center' | 'bottom';
+    horizontal?: 'left' | 'center' | 'right';
   },
   offsetX: number,
   offsetY: number
@@ -326,7 +329,12 @@ export function popover(options: PopoverProperty) {
   }
   popoverState.open = false;
 
-  // ===== ยก logic เหมือนใน pluginFn(...) เดิม
+  // ===== [เพิ่ม Debounce Variables และ ref สำหรับ animationend] =====
+  let isClosing = false;
+  let closeTimer: number | null = null;
+  let handleAnimationEnd: ((this: HTMLElement, ev: AnimationEvent) => any) | null = null;
+  // ===================================================================
+
   const {
     controls = '',
     type = 'modal',
@@ -350,13 +358,27 @@ export function popover(options: PopoverProperty) {
     zIndex,
   } = options;
 
+  // เพิ่ม tooltip เข้าไปใน hashPopup
   const hashPopup = {
     dropdown: 'menu',
     listbox: 'listbox',
     treeview: 'tree',
     grid: 'grid',
     modal: 'dialog',
+    tooltip: 'false', // เพิ่มตรงนี้
   } as const;
+
+  // ถ้าเป็น tooltip => override บางค่าตามต้องการ
+  let finalRole = role;
+  let finalTrapFocus = trapFocus;
+  if (type === 'tooltip') {
+    // ถ้า role ยังเป็น 'dialog' อยู่ แสดงว่า user ไม่ได้กำหนดมาเอง ก็เปลี่ยนเป็น 'tooltip'
+    if (finalRole === 'dialog') {
+      finalRole = 'tooltip';
+    }
+    // tooltip ปกติไม่ต้อง trapFocus
+    finalTrapFocus = false;
+  }
 
   // ===== สร้าง PopoverAPI ในรูปเดียวกับ plugin
   const api: PopoverAPI = {
@@ -365,6 +387,7 @@ export function popover(options: PopoverProperty) {
         'aria-controls': controls,
         'aria-haspopup': hashPopup[type],
         'aria-expanded': false,
+        tabIndex: 0,
       },
     },
     panel(jsx: any) {
@@ -373,7 +396,7 @@ export function popover(options: PopoverProperty) {
         container = document.createElement('div');
         container.id = controls;
         container.setAttribute('hidden', '');
-        container.setAttribute('role', role);
+        container.setAttribute('role', finalRole);
         container.setAttribute('aria-modal', 'false');
         if (ariaLabel) {
           container.setAttribute('aria-label', ariaLabel);
@@ -394,6 +417,16 @@ export function popover(options: PopoverProperty) {
       }
 
       popoverState.containerEl = container;
+
+      // ============ [เพิ่ม mouseleave สำหรับ tooltip container] ============
+      if (type === 'tooltip') {
+        container.addEventListener('mouseleave', (evt) => {
+          // เมื่อเมาส์ออกจาก container popover -> เรียก close
+          api.actions.close(evt);
+        });
+      }
+      // ===================== [จบการเพิ่ม] =====================
+
       return createPortal(jsx, container);
     },
 
@@ -410,6 +443,24 @@ export function popover(options: PopoverProperty) {
 
     actions: {
       show(e: any) {
+        // -----------------------------
+        // [ยกเลิกการปิดถ้ากำลัง close]
+        // -----------------------------
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+          closeTimer = null;
+        }
+        isClosing = false;
+
+        // -----------------------------
+        // [ล้าง animationend callback เก่า ถ้ามี]
+        // -----------------------------
+        const containerOld = popoverState.containerEl;
+        if (containerOld && handleAnimationEnd) {
+          containerOld.removeEventListener('animationend', handleAnimationEnd);
+          handleAnimationEnd = null;
+        }
+
         if (popoverState.open) return;
         popoverState.open = true;
 
@@ -460,7 +511,7 @@ export function popover(options: PopoverProperty) {
           popoverState.triggerEl.setAttribute('aria-expanded', 'true');
           popoverState.triggerEl.setAttribute(
             'aria-haspopup',
-            role === 'dialog' ? 'dialog' : 'menu'
+            finalRole === 'dialog' ? 'dialog' : hashPopup[type]
           );
           popoverState.triggerEl.setAttribute('aria-controls', container.id);
         }
@@ -492,7 +543,7 @@ export function popover(options: PopoverProperty) {
         };
         document.addEventListener('keydown', popoverState.keydownHandler);
 
-        if (trapFocus) {
+        if (finalTrapFocus) {
           popoverState.focusTrapCleanup = enableFocusTrap(container);
         }
 
@@ -550,56 +601,99 @@ export function popover(options: PopoverProperty) {
 
       close(e: any) {
         if (!popoverState.open) return;
-        popoverState.open = false;
 
-        const container = popoverState.containerEl;
-        if (!container) return;
+        // -----------------------------
+        // [Debounce] ถ้ากำลังปิดอยู่แล้ว → หยุด
+        // -----------------------------
+        if (isClosing) return;
 
-        popoverState._events?.willClose?.({ open: false });
+        // ===== [เพิ่มเงื่อนไข: ถ้าเป็น tooltip => เช็คเมาส์ก่อนปิด] =====
+        if (type === 'tooltip' && e && e.relatedTarget) {
+          const targetNode = e.relatedTarget as Node;
+          const inTrigger =
+            popoverState.triggerEl instanceof HTMLElement
+              ? popoverState.triggerEl.contains(targetNode)
+              : false;
+          const inPopover =
+            popoverState.containerEl instanceof HTMLElement
+              ? popoverState.containerEl.contains(targetNode)
+              : false;
 
-        if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
-          popoverState.triggerEl.setAttribute('aria-expanded', 'false');
+          // ถ้าเมาส์ยังอยู่ใน trigger หรือ popover => ไม่ปิด
+          if (inTrigger || inPopover) {
+            return;
+          }
+        }
+        // ===== [จบเพิ่มเงื่อนไข tooltip] =====
+
+        isClosing = true;
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+          closeTimer = null;
         }
 
-        if (popoverState.outsideClickHandler) {
-          document.removeEventListener('click', popoverState.outsideClickHandler);
-          popoverState.outsideClickHandler = undefined;
-        }
-        if (popoverState.keydownHandler) {
-          document.removeEventListener('keydown', popoverState.keydownHandler);
-          popoverState.keydownHandler = undefined;
-        }
+        // ตั้งเวลาเผื่อว่าผู้ใช้เลื่อนเมาส์กลับเข้ามาได้ทัน
+        closeTimer = window.setTimeout(() => {
+          popoverState.open = false;
 
-        if (popoverState.focusTrapCleanup) {
-          popoverState.focusTrapCleanup();
-          popoverState.focusTrapCleanup = undefined;
-        }
+          const container = popoverState.containerEl;
+          if (!container) {
+            isClosing = false;
+            closeTimer = null;
+            return;
+          }
 
-        if (popoverState.scrollHandler) {
-          window.removeEventListener('scroll', popoverState.scrollHandler, true);
-          popoverState.scrollHandler = undefined;
-        }
-        if (popoverState.resizeHandler) {
-          window.removeEventListener('resize', popoverState.resizeHandler);
-          popoverState.resizeHandler = undefined;
-        }
+          popoverState._events?.willClose?.({ open: false });
 
-        container.classList.remove('popoverPluginFadeInClass');
-        container.classList.add('popoverPluginFadeOutClass');
-        container.addEventListener(
-          'animationend',
-          () => {
+          if (toggleAriaExpanded && popoverState.triggerEl instanceof HTMLElement) {
+            popoverState.triggerEl.setAttribute('aria-expanded', 'false');
+          }
+
+          if (popoverState.outsideClickHandler) {
+            document.removeEventListener('click', popoverState.outsideClickHandler);
+            popoverState.outsideClickHandler = undefined;
+          }
+          if (popoverState.keydownHandler) {
+            document.removeEventListener('keydown', popoverState.keydownHandler);
+            popoverState.keydownHandler = undefined;
+          }
+
+          if (popoverState.focusTrapCleanup) {
+            popoverState.focusTrapCleanup();
+            popoverState.focusTrapCleanup = undefined;
+          }
+
+          if (popoverState.scrollHandler) {
+            window.removeEventListener('scroll', popoverState.scrollHandler, true);
+            popoverState.scrollHandler = undefined;
+          }
+          if (popoverState.resizeHandler) {
+            window.removeEventListener('resize', popoverState.resizeHandler);
+            popoverState.resizeHandler = undefined;
+          }
+
+          container.classList.remove('popoverPluginFadeInClass');
+          container.classList.add('popoverPluginFadeOutClass');
+
+          // สร้าง callback 'animationend' ใหม่ทุกครั้งที่ close
+          handleAnimationEnd = function handleAnimationEndCb() {
             container.hidden = true;
             container.classList.remove('popoverPluginFadeOutClass');
+            container.removeEventListener('animationend', handleAnimationEnd!);
+            handleAnimationEnd = null;
 
             if (popoverState.triggerEl instanceof HTMLElement) {
               popoverState.triggerEl.focus();
             }
             popoverState._events?.closed?.({ open: false });
             popoverState._events?.didClosed?.({ open: false });
-          },
-          { once: true }
-        );
+
+            isClosing = false;
+            closeTimer = null;
+          };
+
+          container.addEventListener('animationend', handleAnimationEnd, { once: true });
+        }, 125); // ดีเลย์ 80ms กัน mouseenter กลับมา
       },
 
       closeAll() {
@@ -615,6 +709,6 @@ export function popover(options: PopoverProperty) {
     popoverRegistry.push(api);
   }
 
-  // ===== กลับ: เนื่องจากผู้ใช้ต้องการ .panel, .events, .actions => return api.popover
+  // ===== กลับ: เนื่องจากผู้ใช้ต้องการ .panel, .events, .actions => return api
   return api;
 }
