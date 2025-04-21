@@ -333,10 +333,10 @@ export function snackbar(options: SnackbarPluginOptions) {
 // ---------------------------------------------------------------------
 function validateOffset(position: SnackbarPosition, offsetX?: number, offsetY?: number) {
   if ((position === 'top-center' || position === 'bottom-center') && typeof offsetX === 'number') {
-    throw new Error(`ถ้าใช้ ${position} จะปรับ offsetX ไม่ได้`);
+    console.warn(`[CSS-CTRL-WARN] OffsetX has no effect when using position "${position}".`);
   }
   if ((position === 'right-center' || position === 'left-center') && typeof offsetY === 'number') {
-    throw new Error(`ถ้าใช้ ${position} จะปรับ offsetY ไม่ได้`);
+    console.warn(`[CSS-CTRL-WARN] OffsetY has no effect when using position "${position}".`);
   }
 }
 
