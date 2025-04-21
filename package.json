@@ -20,9 +20,9 @@
       "import": "./dist/popover.js",
       "types": "./dist/popover.d.ts"
     },
-    "./notification": {
-      "import": "./dist/notification.js",
-      "types": "./dist/notification.d.ts"
+    "./snackbar": {
+      "import": "./dist/snackbar.js",
+      "types": "./dist/snackbar.d.ts"
     }
   },
   "files": [

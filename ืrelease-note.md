@@ -174,4 +174,4 @@ export const appcss = css<{ modal: [] }>`
 
 ---
 
-notification plugin
+snackbar plugin

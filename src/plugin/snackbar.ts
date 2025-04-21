@@ -1,8 +1,8 @@
-// notification.ts
+// snackbar.ts
 import { createRoot, Root } from 'react-dom/client';
 
 // ตำแหน่งต่าง ๆ
-export type NotificationPosition =
+export type SnackbarPosition =
   | 'top-left'
   | 'top-center'
   | 'top-right'
@@ -12,16 +12,16 @@ export type NotificationPosition =
   | 'bottom-left'
   | 'left-center';
 
-export type NotificationStackBehavior = 'overlay' | 'stack' | 'replace';
+export type SnackbarStackBehavior = 'stack' | 'replace';
 
-export interface NotificationPluginOptions {
+export interface SnackbarPluginOptions {
   controls: string;
   type: 'status' | 'alert';
   heading?: string;
   spacing?: number;
   describe?: string;
-  position: NotificationPosition;
-  stackBehavior?: NotificationStackBehavior;
+  position: SnackbarPosition;
+  stackBehavior?: SnackbarStackBehavior;
   maxStack?: number;
   close?: 'close-action' | 'auto-close';
   autoCloseDuration?: number; // ms
@@ -30,29 +30,29 @@ export interface NotificationPluginOptions {
   offsetY?: number;
 }
 
-/** ข้อมูลภายในของแต่ละ notification */
-interface NotificationItem {
+/** ข้อมูลภายในของแต่ละ snackbar */
+interface SnackbarItem {
   id: string;
   containerEl: HTMLDivElement;
   root: Root;
   timer?: number | null;
 }
 
-interface NotificationState {
+interface SnackbarState {
   containerOverlayEl?: HTMLDivElement | null;
-  items: NotificationItem[];
+  items: SnackbarItem[];
 }
 
-const FADE_IN_CLASS = 'notificationPluginFadeInClass';
-const FADE_OUT_CLASS = 'notificationPluginFadeOutClass';
+const FADE_IN_CLASS = 'snackbarPluginFadeInClass';
+const FADE_OUT_CLASS = 'snackbarPluginFadeOutClass';
 
 /**
- * notification(options) => { actions: { open, closeAll }, ... }
+ * snackbar(options) => { actions: { open, closeAll }, ... }
  *   - ใช้ "absolute positioning" คล้าย antd
  *   - มีการแยก logic top-based vs bottom-based
  *     เพื่อให้ position = bottom-* วางตัวใหม่ที่ bottom=0, ตัวเก่าเลื่อนขึ้น
  */
-export function notification(options: NotificationPluginOptions) {
+export function snackbar(options: SnackbarPluginOptions) {
   const {
     position,
     stackBehavior = 'stack',
@@ -71,12 +71,12 @@ export function notification(options: NotificationPluginOptions) {
 
   // ตั้งค่า duration ใน CSS variable
   document.documentElement.style.setProperty(
-    '--notificationPluginFadeDuration',
+    '--snackbarPluginFadeDuration',
     `${animationDuration}ms`
   );
   validateOffset(position, offsetX, offsetY);
 
-  const storage: NotificationState = {
+  const storage: SnackbarState = {
     containerOverlayEl: null,
     items: [],
   };
@@ -105,11 +105,11 @@ export function notification(options: NotificationPluginOptions) {
   }
 
   /**
-   * repositionNotifications:
+   * repositionSnackbars:
    *  - ถ้า top-based => newest on top(0), older down
    *  - ถ้า bottom-based => newest on bottom(0), older up
    */
-  function repositionNotifications() {
+  function repositionSnackbars() {
     if (!storage.containerOverlayEl) return;
 
     // เช็คว่าเป็น bottom-based หรือไม่
@@ -188,7 +188,7 @@ export function notification(options: NotificationPluginOptions) {
     });
 
     const itemDiv = document.createElement('div');
-    itemDiv.classList.add('notificationPluginItem');
+    itemDiv.classList.add('snackbarPluginItem');
     itemDiv.classList.add(FADE_IN_CLASS);
 
     if (heading) itemDiv.setAttribute('aria-labelledby', `${controls}-${heading}`);
@@ -207,7 +207,7 @@ export function notification(options: NotificationPluginOptions) {
     const root = createRoot(itemDiv);
     root.render(content);
 
-    const newItem: NotificationItem = {
+    const newItem: SnackbarItem = {
       id: createUid(),
       containerEl: itemDiv,
       root,
@@ -225,7 +225,7 @@ export function notification(options: NotificationPluginOptions) {
 
     // รอ 1 frame => วัด size => reposition
     requestAnimationFrame(() => {
-      repositionNotifications();
+      repositionSnackbars();
     });
 
     if (close === 'auto-close') {
@@ -249,7 +249,7 @@ export function notification(options: NotificationPluginOptions) {
     storage.items = [];
   }
 
-  function removeItemWithFadeOut(item: NotificationItem) {
+  function removeItemWithFadeOut(item: SnackbarItem) {
     if (!item.containerEl.parentNode) {
       return;
     }
@@ -267,7 +267,7 @@ export function notification(options: NotificationPluginOptions) {
     });
   }
 
-  function removeItemNow(item: NotificationItem, removeFromStorage: boolean) {
+  function removeItemNow(item: SnackbarItem, removeFromStorage: boolean) {
     if (item.timer) {
       clearTimeout(item.timer);
       item.timer = undefined;
@@ -288,7 +288,7 @@ export function notification(options: NotificationPluginOptions) {
 
     // reposition the rest
     requestAnimationFrame(() => {
-      repositionNotifications();
+      repositionSnackbars();
     });
 
     if (storage.items.length === 0 && storage.containerOverlayEl) {
@@ -331,7 +331,7 @@ export function notification(options: NotificationPluginOptions) {
 // ---------------------------------------------------------------------
 // Helper Functions
 // ---------------------------------------------------------------------
-function validateOffset(position: NotificationPosition, offsetX?: number, offsetY?: number) {
+function validateOffset(position: SnackbarPosition, offsetX?: number, offsetY?: number) {
   if ((position === 'top-center' || position === 'bottom-center') && typeof offsetX === 'number') {
     throw new Error(`ถ้าใช้ ${position} จะปรับ offsetX ไม่ได้`);
   }
@@ -340,8 +340,8 @@ function validateOffset(position: NotificationPosition, offsetX?: number, offset
   }
 }
 
-function getOverlayClassName(position: NotificationPosition) {
-  const NOTIFICATION_BASE_CLASS = 'notificationPlugin';
+function getOverlayClassName(position: SnackbarPosition) {
+  const NOTIFICATION_BASE_CLASS = 'snackbarPlugin';
   switch (position) {
     case 'top-left':
       return `${NOTIFICATION_BASE_CLASS}TopLeftOverlay`;
@@ -364,7 +364,7 @@ function getOverlayClassName(position: NotificationPosition) {
 
 function applyOverlayPosition(
   el: HTMLDivElement,
-  position: NotificationPosition,
+  position: SnackbarPosition,
   offsetX?: number,
   offsetY?: number
 ) {
