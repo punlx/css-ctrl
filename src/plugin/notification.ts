@@ -43,7 +43,6 @@ interface NotificationState {
   items: NotificationItem[];
 }
 
-const NOTIFICATION_BASE_CLASS = 'notificationPlugin';
 const FADE_IN_CLASS = 'notificationPluginFadeInClass';
 const FADE_OUT_CLASS = 'notificationPluginFadeOutClass';
 
