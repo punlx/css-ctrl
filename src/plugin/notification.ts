@@ -57,8 +57,8 @@ export function notification(options: NotificationPluginOptions) {
     position,
     stackBehavior = 'stack',
     maxStack = 5,
-    close = 'close-action',
-    autoCloseDuration = 3000,
+    close = 'auto-close',
+    autoCloseDuration = 4000,
     animationDuration = 300,
     offsetX,
     offsetY,
@@ -93,17 +93,11 @@ export function notification(options: NotificationPluginOptions) {
       overlay.classList.add(className);
 
       // fixed
-      overlay.style.position = 'fixed';
-      overlay.style.zIndex = '9999';
 
       // จัดตำแหน่งตาม offset/position
       applyOverlayPosition(overlay, position, offsetX, offsetY);
 
       // กำหนดค่าเพื่อให้ child เป็น absolute
-      overlay.style.width = 'auto';
-      overlay.style.height = 'auto';
-      overlay.style.pointerEvents = 'none';
-
       document.body.appendChild(overlay);
     }
     storage.containerOverlayEl = overlay;
