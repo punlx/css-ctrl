@@ -1,7 +1,7 @@
 // notification.ts
 import { createRoot, Root } from 'react-dom/client';
 
-// กำหนดตำแหน่งต่าง ๆ
+// ตำแหน่งต่าง ๆ
 export type NotificationPosition =
   | 'top-left'
   | 'top-center'
@@ -12,25 +12,20 @@ export type NotificationPosition =
   | 'bottom-left'
   | 'left-center';
 
-// กำหนดวิธี stack
 export type NotificationStackBehavior = 'overlay' | 'stack' | 'replace';
 
 export interface NotificationPluginOptions {
   controls: string;
   type: 'status' | 'alert';
   heading?: string;
+
   describe?: string;
   position: NotificationPosition;
   stackBehavior?: NotificationStackBehavior;
   maxStack?: number;
-
-  // ถ้าตั้งเป็น 'auto-close' => จะปิดอัตโนมัติ
   close?: 'close-action' | 'auto-close';
   autoCloseDuration?: number; // ms
-
-  animationDuration?: number; // ใช้สำหรับ fade in/out (ms)
-
-  // offset
+  animationDuration?: number; // fade in/out (ms)
   offsetX?: number;
   offsetY?: number;
 }
@@ -38,23 +33,27 @@ export interface NotificationPluginOptions {
 /** ข้อมูลภายในของแต่ละ notification */
 interface NotificationItem {
   id: string;
-  containerEl: HTMLDivElement; // <div> ของ notification ตัวนี้
-  root: Root; // React Root
-  timer?: number | null; // handle setTimeout ถ้ามี autoClose
+  containerEl: HTMLDivElement;
+  root: Root;
+  timer?: number | null;
 }
 
-/** storage สำหรับ plugin instance */
 interface NotificationState {
-  containerOverlayEl?: HTMLDivElement | null; // container หลักสำหรับตำแหน่งนั้น
-  items: NotificationItem[]; // เก็บ noti ที่กำลังแสดง
+  containerOverlayEl?: HTMLDivElement | null;
+  items: NotificationItem[];
 }
 
-const NOTIFICATION_BASE_CLASS = 'notificationPlugin'; // prefix
+const NOTIFICATION_BASE_CLASS = 'notificationPlugin';
 const FADE_IN_CLASS = 'notificationPluginFadeInClass';
 const FADE_OUT_CLASS = 'notificationPluginFadeOutClass';
 
+/**
+ * notification(options) => { actions: { open, closeAll }, ... }
+ *   - ใช้ "absolute positioning" คล้าย antd
+ *   - มีการแยก logic top-based vs bottom-based
+ *     เพื่อให้ position = bottom-* วางตัวใหม่ที่ bottom=0, ตัวเก่าเลื่อนขึ้น
+ */
 export function notification(options: NotificationPluginOptions) {
-  // default config
   const {
     position,
     stackBehavior = 'stack',
@@ -70,77 +69,133 @@ export function notification(options: NotificationPluginOptions) {
     type,
   } = options;
 
-  // ===== 1) รองรับการปรับ animationDuration โดยใช้ CSS Custom Property =====
-  // (แบบเดียวกับ dialog.ts)
-  // เมื่อประกาศ plugin instance นี้ขึ้นมา (หรือจะทำใน open() ก็ได้)
-  // เราจะ set ไว้ที่ document.documentElement
+  // ตั้งค่า duration ใน CSS variable
   document.documentElement.style.setProperty(
     '--notificationPluginFadeDuration',
     `${animationDuration}ms`
   );
-
-  // ตรวจสอบ offset ตาม requirement
   validateOffset(position, offsetX, offsetY);
 
-  // สร้าง storage ภายใน (เหมือน dialog.ts ที่มี storage.dialog...)
   const storage: NotificationState = {
     containerOverlayEl: null,
     items: [],
   };
 
-  // ====== Utility: สร้าง/หา container overlay สำหรับ position นั้น ======
+  // สร้าง/หา container overlay
   function getOverlayContainer(): HTMLDivElement {
     if (storage.containerOverlayEl) {
       return storage.containerOverlayEl;
     }
-
-    // ชื่อ class สำหรับ container overlay ตาม position
     const className = getOverlayClassName(position);
-
-    // เช็คว่ามีอยู่แล้วหรือไม่
     let overlay = document.querySelector<HTMLDivElement>(`.${className}`);
     if (!overlay) {
-      // สร้างใหม่
       overlay = document.createElement('div');
       overlay.classList.add(className);
 
-      // ตั้ง position เป็น fixed
+      // fixed
       overlay.style.position = 'fixed';
-      overlay.style.zIndex = '9999'; // กำหนด zIndex ได้ตามต้องการ
+      overlay.style.zIndex = '9999';
 
-      // ตั้ง style.top/left/right/bottom ตาม position + offset
+      // จัดตำแหน่งตาม offset/position
       applyOverlayPosition(overlay, position, offsetX, offsetY);
+
+      // กำหนดค่าเพื่อให้ child เป็น absolute
+      overlay.style.width = 'auto';
+      overlay.style.height = 'auto';
+      overlay.style.pointerEvents = 'none';
 
       document.body.appendChild(overlay);
     }
-
     storage.containerOverlayEl = overlay;
     return overlay;
   }
 
-  // ====== Action: open notification ======
-  function open(content: any) {
-    // content = ReactNode ที่ user ส่งมา (เหมือน dialog.ts ที่ส่ง modal)
+  /**
+   * repositionNotifications:
+   *  - ถ้า top-based => newest on top(0), older down
+   *  - ถ้า bottom-based => newest on bottom(0), older up
+   */
+  function repositionNotifications() {
+    if (!storage.containerOverlayEl) return;
+    const spacing = 8;
 
+    // เช็คว่าเป็น bottom-based หรือไม่
+    const isBottom =
+      position === 'bottom-left' || position === 'bottom-center' || position === 'bottom-right';
+
+    if (isBottom) {
+      // กรณี bottom => วาง item[0] = bottom=0 => item[1] เหนือมัน
+      let currentOffset = 0;
+      for (let i = 0; i < storage.items.length; i++) {
+        const item = storage.items[i];
+        const el = item.containerEl;
+        const itemHeight = el.offsetHeight || 0;
+
+        el.style.position = 'absolute';
+        el.style.left = '';
+        el.style.right = '';
+        el.style.top = '';
+        el.style.bottom = '';
+
+        // ถ้า overlay อยู่ bottom-right => right=0
+        // ถ้า bottom-left => left=0
+        // ถ้า bottom-center => translateX(-50%) => code ต้นฉบับ handle ใน applyOverlayPosition
+        // สมมุติว่า (เหมือน antd) => right=0 ถ้า user อยาก align
+        // แต่จริง ๆ ถ้าต้อง align left => check position
+        if (position === 'bottom-left') {
+          el.style.left = '0';
+        } else if (position === 'bottom-right') {
+          el.style.right = '0';
+        }
+
+        // bottom = currentOffset
+        el.style.bottom = `${currentOffset}px`;
+        currentOffset += itemHeight + spacing;
+      }
+    } else {
+      // top-based (รวมถึง right-center, left-center => ให้ stack จากบนลงล่าง)
+      let currentOffset = 0;
+      for (let i = 0; i < storage.items.length; i++) {
+        const item = storage.items[i];
+        const el = item.containerEl;
+        const itemHeight = el.offsetHeight || 0;
+
+        el.style.position = 'absolute';
+        el.style.left = '';
+        el.style.right = '';
+        el.style.top = '';
+        el.style.bottom = '';
+
+        if (position === 'top-left' || position === 'left-center') {
+          el.style.left = '0';
+        } else if (position === 'top-right' || position === 'right-center') {
+          el.style.right = '0';
+        }
+
+        el.style.top = `${currentOffset}px`;
+        currentOffset += itemHeight + spacing;
+      }
+    }
+  }
+
+  function open(content: any) {
     const overlay = getOverlayContainer();
 
-    // ถ้า stackBehavior = 'replace' => ลบของเก่าหมดก่อน
     if (stackBehavior === 'replace') {
       for (const item of storage.items) {
-        removeItemNow(item, false); // ลบทันที
+        removeItemNow(item, false);
       }
       storage.items = [];
     }
 
-    // ===== [NEW CODE] ตั้งค่า aria-expanded="true" ที่ trigger =====
+    // aria-expanded="true"
     const triggers = document.querySelectorAll(`[aria-controls="${controls}"]`);
     triggers.forEach((triggerEl) => {
       triggerEl.setAttribute('aria-expanded', 'true');
     });
 
-    // สร้าง div สำหรับ notification ชิ้นนี้
     const itemDiv = document.createElement('div');
-    // ใส่คลาส fade in
+    itemDiv.classList.add('notificationPluginItem');
     itemDiv.classList.add(FADE_IN_CLASS);
 
     if (heading) itemDiv.setAttribute('aria-labelledby', `${controls}-${heading}`);
@@ -153,14 +208,12 @@ export function notification(options: NotificationPluginOptions) {
       itemDiv.ariaLive = 'polite';
     }
 
-    // ===== 2) prepend แทน append => ให้ noti ใหม่อยู่บนสุด =====
-    overlay.prepend(itemDiv);
+    // appendChild => newest => index=0
+    overlay.appendChild(itemDiv);
 
-    // createRoot
     const root = createRoot(itemDiv);
     root.render(content);
 
-    // สร้าง item object
     const newItem: NotificationItem = {
       id: createUid(),
       containerEl: itemDiv,
@@ -168,10 +221,8 @@ export function notification(options: NotificationPluginOptions) {
       timer: undefined,
     };
 
-    // ===== จัดเก็บ item ใหม่ใน index 0 => ให้เป็น “ลำดับแรก”
     storage.items.unshift(newItem);
 
-    // ตรวจ maxStack => ถ้าเกินให้ลบตัวท้ายสุด (เก่าสุด)
     if (storage.items.length > maxStack) {
       const removedItem = storage.items.pop();
       if (removedItem) {
@@ -179,7 +230,11 @@ export function notification(options: NotificationPluginOptions) {
       }
     }
 
-    // ถ้า close=auto-close => ตั้ง timer
+    // รอ 1 frame => วัด size => reposition
+    requestAnimationFrame(() => {
+      repositionNotifications();
+    });
+
     if (close === 'auto-close') {
       newItem.timer = window.setTimeout(() => {
         removeItemWithFadeOut(newItem);
@@ -187,15 +242,11 @@ export function notification(options: NotificationPluginOptions) {
     }
   }
 
-  // ====== Action: closeAll ======
   function closeAll() {
-    // ===== [NEW CODE] ตั้งค่า aria-expanded="false" ที่ trigger เมื่อปิดทั้งหมด =====
     const triggers = document.querySelectorAll(`[aria-controls="${controls}"]`);
     triggers.forEach((triggerEl) => {
       triggerEl.setAttribute('aria-expanded', 'false');
     });
-
-    // ลบทุกอันด้วย fade out
     for (const item of storage.items) {
       if (item.timer) {
         clearTimeout(item.timer);
@@ -205,17 +256,13 @@ export function notification(options: NotificationPluginOptions) {
     storage.items = [];
   }
 
-  // ====== Remove item (fade out + animationend => unmount) ======
   function removeItemWithFadeOut(item: NotificationItem) {
     if (!item.containerEl.parentNode) {
       return;
     }
-
-    // เอา class fadeIn ออก ใส่ class fadeOut
     item.containerEl.classList.remove(FADE_IN_CLASS);
     item.containerEl.classList.add(FADE_OUT_CLASS);
 
-    // ฟัง event animationend => unmount + remove child
     requestAnimationFrame(() => {
       item.containerEl.addEventListener(
         'animationend',
@@ -227,7 +274,6 @@ export function notification(options: NotificationPluginOptions) {
     });
   }
 
-  // ลบ item ออกจาก DOM ทันที (ใช้ในกรณี replace หรือ animationend)
   function removeItemNow(item: NotificationItem, removeFromStorage: boolean) {
     if (item.timer) {
       clearTimeout(item.timer);
@@ -235,8 +281,9 @@ export function notification(options: NotificationPluginOptions) {
     }
     item.root.unmount?.();
 
-    if (item.containerEl.parentNode) {
-      item.containerEl.parentNode.removeChild(item.containerEl);
+    const parent = item.containerEl.parentNode;
+    if (parent) {
+      parent.removeChild(item.containerEl);
     }
 
     if (removeFromStorage) {
@@ -246,14 +293,16 @@ export function notification(options: NotificationPluginOptions) {
       }
     }
 
-    // ถ้าลบจน empty => optional: remove overlayContainerEl ออกได้
+    // reposition the rest
+    requestAnimationFrame(() => {
+      repositionNotifications();
+    });
+
     if (storage.items.length === 0 && storage.containerOverlayEl) {
-      // ===== [NEW CODE] ตั้ง aria-expanded="false" ด้วย (กรณีรายการหมด) =====
       const triggers = document.querySelectorAll(`[aria-controls="${controls}"]`);
       triggers.forEach((triggerEl) => {
         triggerEl.setAttribute('aria-expanded', 'false');
       });
-
       setTimeout(() => {
         if (storage.items.length === 0 && storage.containerOverlayEl?.parentNode) {
           storage.containerOverlayEl.parentNode.removeChild(storage.containerOverlayEl);
@@ -263,7 +312,6 @@ export function notification(options: NotificationPluginOptions) {
     }
   }
 
-  // ====== Return API เหมือน dialog.ts ======
   return {
     actions: {
       open,
@@ -271,9 +319,9 @@ export function notification(options: NotificationPluginOptions) {
     },
     aria: {
       trigger: {
-        'aria-haspopup': `true`,
+        'aria-haspopup': 'true',
         'aria-controls': controls,
-        'aria-expanded': `false`,
+        'aria-expanded': 'false',
       },
       notify: {
         heading: {
@@ -288,9 +336,8 @@ export function notification(options: NotificationPluginOptions) {
 }
 
 // ---------------------------------------------------------------------
-// Helper function
+// Helper Functions
 // ---------------------------------------------------------------------
-
 function validateOffset(position: NotificationPosition, offsetX?: number, offsetY?: number) {
   if ((position === 'top-center' || position === 'bottom-center') && typeof offsetX === 'number') {
     throw new Error(`ถ้าใช้ ${position} จะปรับ offsetX ไม่ได้`);
@@ -301,6 +348,7 @@ function validateOffset(position: NotificationPosition, offsetX?: number, offset
 }
 
 function getOverlayClassName(position: NotificationPosition) {
+  const NOTIFICATION_BASE_CLASS = 'notificationPlugin';
   switch (position) {
     case 'top-left':
       return `${NOTIFICATION_BASE_CLASS}TopLeftOverlay`;
