@@ -14,28 +14,49 @@ export type SnackbarPosition =
 
 export type SnackbarStackBehavior = 'stack' | 'replace';
 
-/** ส่วนที่เพิ่มเข้ามา: ประกาศ interface สำหรับ events */
+/** ประกาศ interface สำหรับ events โดยเพิ่ม target ที่เป็น Element */
 export interface SnackbarEvents {
-  /** เรียกก่อนจะสร้าง DOM/render content ของ snackbar */
-  willOpen?: (info: { content: any }) => void;
+  /**
+   * เรียกก่อนจะสร้าง DOM/render content ของ snackbar
+   * ไม่ส่งค่าใดๆ กลับ
+   */
+  willShow?: () => void;
 
-  /** เรียกหลังสร้าง DOM เสร็จ และยังไม่จบการ fade-in */
-  open?: (info: { itemId: string; content: any }) => void;
+  /**
+   * เรียกหลังสร้าง DOM เสร็จ ยังไม่จบการ fade-in
+   * คืน { itemId, target } ของ item ที่เพิ่ง show
+   */
+  show?: (info: { itemId: string; target: HTMLElement }) => void;
 
-  /** เรียกหลังจากเริ่มแสดง (เมื่อผ่านขั้นตอน reposition แล้ว หรือหลัง animation ก็ได้) */
-  didOpen?: (info: { itemId: string }) => void;
+  /**
+   * เรียกหลังแสดงเสร็จ (หรือหลัง reposition)
+   * คืน { itemId, target } ของ item ที่เพิ่ง didshow
+   */
+  didShow?: (info: { itemId: string; target: HTMLElement }) => void;
 
-  /** เรียกก่อนจะเริ่ม fade-out (ไม่ว่าจะ auto-close หรือ manual) */
-  willClose?: (info: { itemId: string }) => void;
+  /**
+   * เรียกก่อนจะเริ่ม fade-out (ไม่ว่าจะ auto-close หรือ manual)
+   * คืน { itemId, target } ของ item ที่กำลังจะปิด
+   */
+  willClose?: (info: { itemId: string; target: HTMLElement }) => void;
 
-  /** เรียกหลังการ remove DOM เสร็จ (จบ animation fade-out แล้ว) */
-  closed?: (info: { itemId: string }) => void;
+  /**
+   * เรียกหลังการ remove DOM เสร็จ (จบ animation fade-out แล้ว)
+   * คืน { itemId, target } ของ item ที่เพิ่งปิด
+   */
+  closed?: (info: { itemId: string; target: HTMLElement }) => void;
 
-  /** เรียกเพิ่มเติมหลัง closed อีกที ถ้าต้องการทำงานซ้ำอีกหน่อย */
-  didClosed?: (info: { itemId: string }) => void;
+  /**
+   * เรียกเพิ่มเติมหลัง closed อีกที ถ้าต้องการทำงานซ้ำอีกหน่อย
+   * คืน { itemId, target } ของ item ที่เพิ่งปิด
+   */
+  didClosed?: (info: { itemId: string; target: HTMLElement }) => void;
 
-  /** เรียกเมื่อ stack มีการเปลี่ยนแปลง (เพิ่ม/ลบ item) */
-  stackChanged?: (itemIds: string[]) => void;
+  /**
+   * เรียกเมื่อ stack มีการเปลี่ยนแปลง (เพิ่ม/ลบ item)
+   * คืน { itemIds, targets } ของรายการ item ปัจจุบันใน stack
+   */
+  stackChanged?: (info: { itemIds: string[]; targets: HTMLElement[] }) => void;
 }
 
 export interface SnackbarPluginOptions {
@@ -72,7 +93,7 @@ const FADE_IN_CLASS = 'snackbarPluginFadeInClass';
 const FADE_OUT_CLASS = 'snackbarPluginFadeOutClass';
 
 /**
- * snackbar(options) => { actions: { open, closeAll }, events, aria: {...} }
+ * snackbar(options) => { actions: { show, closeAll }, events, aria: {...} }
  *   - ใช้ "absolute positioning" คล้าย antd
  *   - มีการแยก logic top-based vs bottom-based
  *     เพื่อให้ position = bottom-* วางตัวใหม่ที่ bottom=0, ตัวเก่าเลื่อนขึ้น
@@ -122,7 +143,6 @@ export function snackbar(options: SnackbarPluginOptions) {
       overlay.classList.add(className);
 
       // fixed
-
       // จัดตำแหน่งตาม offset/position
       applyOverlayPosition(overlay, position, offsetX, offsetY);
 
@@ -141,12 +161,11 @@ export function snackbar(options: SnackbarPluginOptions) {
   function repositionSnackbars() {
     if (!storage.containerOverlayEl) return;
 
-    // เช็คว่าเป็น bottom-based หรือไม่
     const isBottom =
       position === 'bottom-left' || position === 'bottom-center' || position === 'bottom-right';
 
     if (isBottom) {
-      // กรณี bottom => วาง item[0] = bottom=0 => item[1] เหนือมัน
+      // ถ้า bottom => item[0] อยู่ล่างสุด (bottom=0), item[1] ถัดขึ้นไป
       let currentOffset = 0;
       for (let i = 0; i < storage.items.length; i++) {
         const item = storage.items[i];
@@ -194,9 +213,9 @@ export function snackbar(options: SnackbarPluginOptions) {
     }
   }
 
-  function open(content: any) {
-    // เรียก event: willOpen
-    storage._events.willOpen?.({ content });
+  function show(content: any) {
+    // เรียก event: willShow (ไม่ส่งค่าใด ๆ)
+    storage._events.willShow?.();
 
     const overlay = getOverlayContainer();
 
@@ -250,19 +269,22 @@ export function snackbar(options: SnackbarPluginOptions) {
       }
     }
 
-    // event: open
-    storage._events.open?.({ itemId: newItem.id, content });
+    // event: show => ส่ง { itemId, target }
+    storage._events.show?.({ itemId: newItem.id, target: itemDiv });
 
     // รอ 1 frame => วัด size => reposition
     requestAnimationFrame(() => {
       repositionSnackbars();
 
-      // event: didOpen (หลัง reposition เสร็จ)
-      storage._events.didOpen?.({ itemId: newItem.id });
+      // event: didshow => ส่ง { itemId, target }
+      storage._events.didShow?.({ itemId: newItem.id, target: itemDiv });
     });
 
-    // เมื่อเพิ่ม/ลบใน stack => เรียก stackChanged
-    storage._events.stackChanged?.(storage.items.map((it) => it.id));
+    // เมื่อ stack เปลี่ยน => เรียก stackChanged({ itemIds, targets })
+    storage._events.stackChanged?.({
+      itemIds: storage.items.map((it) => it.id),
+      targets: storage.items.map((it) => it.containerEl),
+    });
 
     if (close === 'auto-close') {
       newItem.timer = window.setTimeout(() => {
@@ -286,8 +308,8 @@ export function snackbar(options: SnackbarPluginOptions) {
   }
 
   function removeItemWithFadeOut(item: SnackbarItem) {
-    // event: willClose
-    storage._events.willClose?.({ itemId: item.id });
+    // event: willClose => ส่ง { itemId, target }
+    storage._events.willClose?.({ itemId: item.id, target: item.containerEl });
 
     if (!item.containerEl.parentNode) {
       return;
@@ -330,16 +352,19 @@ export function snackbar(options: SnackbarPluginOptions) {
       repositionSnackbars();
     });
 
-    // event: closed (หลัง removeFromStorage + removeChild)
-    storage._events.closed?.({ itemId: item.id });
+    // event: closed => ส่ง { itemId, target }
+    storage._events.closed?.({ itemId: item.id, target: item.containerEl });
 
-    // event: didClosed
-    storage._events.didClosed?.({ itemId: item.id });
+    // event: didClosed => ส่ง { itemId, target }
+    storage._events.didClosed?.({ itemId: item.id, target: item.containerEl });
 
-    // เมื่อเพิ่ม/ลบใน stack => เรียก stackChanged
-    storage._events.stackChanged?.(storage.items.map((it) => it.id));
+    // stackChanged => ส่งรายการ itemId + target ปัจจุบัน
+    storage._events.stackChanged?.({
+      itemIds: storage.items.map((it) => it.id),
+      targets: storage.items.map((it) => it.containerEl),
+    });
 
-    // ถ้าไม่มี item เหลือแล้ว => ลบ containerOverlayEl ออกจาก DOM
+    // ถ้าไม่มี item เหลือ => ลบ containerOverlayEl ออกจาก DOM
     if (storage.items.length === 0 && storage.containerOverlayEl) {
       const triggers = document.querySelectorAll(`[aria-controls="${controls}"]`);
       triggers.forEach((triggerEl) => {
@@ -355,13 +380,13 @@ export function snackbar(options: SnackbarPluginOptions) {
   }
 
   /**
-   * เพิ่มฟังก์ชัน events(...) เพื่อให้ผู้อื่นผูก callback กับ lifecycle
+   * เพิ่มฟังก์ชัน events(...) เพื่อผูก callback กับ lifecycle
    */
   function events(handlers: SnackbarEvents) {
     storage._events = {
-      willOpen: handlers.willOpen,
-      open: handlers.open,
-      didOpen: handlers.didOpen,
+      willShow: handlers.willShow,
+      show: handlers.show,
+      didShow: handlers.didShow,
       willClose: handlers.willClose,
       closed: handlers.closed,
       didClosed: handlers.didClosed,
@@ -371,10 +396,9 @@ export function snackbar(options: SnackbarPluginOptions) {
 
   return {
     actions: {
-      open,
+      show,
       closeAll,
     },
-    /** ผูก events */
     events,
 
     aria: {

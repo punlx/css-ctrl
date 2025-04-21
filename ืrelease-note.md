@@ -171,7 +171,3 @@ export const appcss = css<{ modal: [] }>`
 `;
 
 ```
-
----
-
-snackbar plugin
