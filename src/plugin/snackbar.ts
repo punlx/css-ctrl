@@ -14,6 +14,30 @@ export type SnackbarPosition =
 
 export type SnackbarStackBehavior = 'stack' | 'replace';
 
+/** ส่วนที่เพิ่มเข้ามา: ประกาศ interface สำหรับ events */
+export interface SnackbarEvents {
+  /** เรียกก่อนจะสร้าง DOM/render content ของ snackbar */
+  willOpen?: (info: { content: any }) => void;
+
+  /** เรียกหลังสร้าง DOM เสร็จ และยังไม่จบการ fade-in */
+  open?: (info: { itemId: string; content: any }) => void;
+
+  /** เรียกหลังจากเริ่มแสดง (เมื่อผ่านขั้นตอน reposition แล้ว หรือหลัง animation ก็ได้) */
+  didOpen?: (info: { itemId: string }) => void;
+
+  /** เรียกก่อนจะเริ่ม fade-out (ไม่ว่าจะ auto-close หรือ manual) */
+  willClose?: (info: { itemId: string }) => void;
+
+  /** เรียกหลังการ remove DOM เสร็จ (จบ animation fade-out แล้ว) */
+  closed?: (info: { itemId: string }) => void;
+
+  /** เรียกเพิ่มเติมหลัง closed อีกที ถ้าต้องการทำงานซ้ำอีกหน่อย */
+  didClosed?: (info: { itemId: string }) => void;
+
+  /** เรียกเมื่อ stack มีการเปลี่ยนแปลง (เพิ่ม/ลบ item) */
+  stackChanged?: (itemIds: string[]) => void;
+}
+
 export interface SnackbarPluginOptions {
   controls: string;
   type: 'status' | 'alert';
@@ -43,11 +67,12 @@ interface SnackbarState {
   items: SnackbarItem[];
 }
 
+/** คลาสสำหรับ fade in/out */
 const FADE_IN_CLASS = 'snackbarPluginFadeInClass';
 const FADE_OUT_CLASS = 'snackbarPluginFadeOutClass';
 
 /**
- * snackbar(options) => { actions: { open, closeAll }, ... }
+ * snackbar(options) => { actions: { open, closeAll }, events, aria: {...} }
  *   - ใช้ "absolute positioning" คล้าย antd
  *   - มีการแยก logic top-based vs bottom-based
  *     เพื่อให้ position = bottom-* วางตัวใหม่ที่ bottom=0, ตัวเก่าเลื่อนขึ้น
@@ -76,9 +101,13 @@ export function snackbar(options: SnackbarPluginOptions) {
   );
   validateOffset(position, offsetX, offsetY);
 
-  const storage: SnackbarState = {
+  /**
+   * เก็บ state ภายใน + Events
+   */
+  const storage: SnackbarState & { _events: SnackbarEvents } = {
     containerOverlayEl: null,
     items: [],
+    _events: {},
   };
 
   // สร้าง/หา container overlay
@@ -130,18 +159,12 @@ export function snackbar(options: SnackbarPluginOptions) {
         el.style.top = '';
         el.style.bottom = '';
 
-        // ถ้า overlay อยู่ bottom-right => right=0
-        // ถ้า bottom-left => left=0
-        // ถ้า bottom-center => translateX(-50%) => code ต้นฉบับ handle ใน applyOverlayPosition
-        // สมมุติว่า (เหมือน antd) => right=0 ถ้า user อยาก align
-        // แต่จริง ๆ ถ้าต้อง align left => check position
         if (position === 'bottom-left') {
           el.style.left = '0';
         } else if (position === 'bottom-right') {
           el.style.right = '0';
         }
 
-        // bottom = currentOffset
         el.style.bottom = `${currentOffset}px`;
         currentOffset += itemHeight + spacing;
       }
@@ -172,6 +195,9 @@ export function snackbar(options: SnackbarPluginOptions) {
   }
 
   function open(content: any) {
+    // เรียก event: willOpen
+    storage._events.willOpen?.({ content });
+
     const overlay = getOverlayContainer();
 
     if (stackBehavior === 'replace') {
@@ -216,6 +242,7 @@ export function snackbar(options: SnackbarPluginOptions) {
 
     storage.items.unshift(newItem);
 
+    // ถ้า stack เต็ม -> pop อันท้ายสุด
     if (storage.items.length > maxStack) {
       const removedItem = storage.items.pop();
       if (removedItem) {
@@ -223,10 +250,19 @@ export function snackbar(options: SnackbarPluginOptions) {
       }
     }
 
+    // event: open
+    storage._events.open?.({ itemId: newItem.id, content });
+
     // รอ 1 frame => วัด size => reposition
     requestAnimationFrame(() => {
       repositionSnackbars();
+
+      // event: didOpen (หลัง reposition เสร็จ)
+      storage._events.didOpen?.({ itemId: newItem.id });
     });
+
+    // เมื่อเพิ่ม/ลบใน stack => เรียก stackChanged
+    storage._events.stackChanged?.(storage.items.map((it) => it.id));
 
     if (close === 'auto-close') {
       newItem.timer = window.setTimeout(() => {
@@ -250,6 +286,9 @@ export function snackbar(options: SnackbarPluginOptions) {
   }
 
   function removeItemWithFadeOut(item: SnackbarItem) {
+    // event: willClose
+    storage._events.willClose?.({ itemId: item.id });
+
     if (!item.containerEl.parentNode) {
       return;
     }
@@ -291,6 +330,16 @@ export function snackbar(options: SnackbarPluginOptions) {
       repositionSnackbars();
     });
 
+    // event: closed (หลัง removeFromStorage + removeChild)
+    storage._events.closed?.({ itemId: item.id });
+
+    // event: didClosed
+    storage._events.didClosed?.({ itemId: item.id });
+
+    // เมื่อเพิ่ม/ลบใน stack => เรียก stackChanged
+    storage._events.stackChanged?.(storage.items.map((it) => it.id));
+
+    // ถ้าไม่มี item เหลือแล้ว => ลบ containerOverlayEl ออกจาก DOM
     if (storage.items.length === 0 && storage.containerOverlayEl) {
       const triggers = document.querySelectorAll(`[aria-controls="${controls}"]`);
       triggers.forEach((triggerEl) => {
@@ -305,16 +354,34 @@ export function snackbar(options: SnackbarPluginOptions) {
     }
   }
 
+  /**
+   * เพิ่มฟังก์ชัน events(...) เพื่อให้ผู้อื่นผูก callback กับ lifecycle
+   */
+  function events(handlers: SnackbarEvents) {
+    storage._events = {
+      willOpen: handlers.willOpen,
+      open: handlers.open,
+      didOpen: handlers.didOpen,
+      willClose: handlers.willClose,
+      closed: handlers.closed,
+      didClosed: handlers.didClosed,
+      stackChanged: handlers.stackChanged,
+    };
+  }
+
   return {
     actions: {
       open,
       closeAll,
     },
+    /** ผูก events */
+    events,
+
     aria: {
       trigger: {
-        'aria-haspopup': 'true',
+        'aria-haspopup': true,
         'aria-controls': controls,
-        'aria-expanded': 'false',
+        'aria-expanded': false,
       },
       notify: {
         heading: {
