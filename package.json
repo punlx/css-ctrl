@@ -1,6 +1,6 @@
 {
   "name": "css-ctrl",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
@@ -19,6 +19,10 @@
     "./popover": {
       "import": "./dist/popover.js",
       "types": "./dist/popover.d.ts"
+    },
+    "./notification": {
+      "import": "./dist/notification.js",
+      "types": "./dist/notification.d.ts"
     }
   },
   "files": [
