@@ -18,7 +18,7 @@ export interface NotificationPluginOptions {
   controls: string;
   type: 'status' | 'alert';
   heading?: string;
-
+  spacing?: number;
   describe?: string;
   position: NotificationPosition;
   stackBehavior?: NotificationStackBehavior;
@@ -67,6 +67,7 @@ export function notification(options: NotificationPluginOptions) {
     describe,
     heading,
     type,
+    spacing = 0,
   } = options;
 
   // ตั้งค่า duration ใน CSS variable
@@ -117,7 +118,6 @@ export function notification(options: NotificationPluginOptions) {
    */
   function repositionNotifications() {
     if (!storage.containerOverlayEl) return;
-    const spacing = 8;
 
     // เช็คว่าเป็น bottom-based หรือไม่
     const isBottom =
