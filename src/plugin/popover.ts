@@ -418,11 +418,24 @@ export function popover(options: PopoverProperty) {
 
       popoverState.containerEl = container;
 
-      // ============ [เพิ่ม mouseleave สำหรับ tooltip container] ============
+      // ============ [เพิ่ม mouseleave และ focusout สำหรับ tooltip container] ============
       if (type === 'tooltip') {
+        // mouseleave → ถ้าเมาส์ออกจาก container => close
         container.addEventListener('mouseleave', (evt) => {
-          // เมื่อเมาส์ออกจาก container popover -> เรียก close
           api.actions.close(evt);
+        });
+
+        // focusout → ถ้าโฟกัสหลุดออกนอก tooltip และ trigger => close
+        container.addEventListener('focusout', (evt) => {
+          if (
+            !container?.contains(evt.relatedTarget as Node) &&
+            !(
+              popoverState.triggerEl instanceof HTMLElement &&
+              popoverState.triggerEl.contains(evt.relatedTarget as Node)
+            )
+          ) {
+            api.actions.close(evt);
+          }
         });
 
         // =============== [เพิ่ม Focus/Blur เพื่อ A11y คีย์บอร์ด] ===============
@@ -433,21 +446,17 @@ export function popover(options: PopoverProperty) {
             `[aria-controls="${controls}"]`
           );
           if (possibleTrigger) {
-            // เก็บไว้ใน popoverState.triggerEl ด้วย
             popoverState.triggerEl = possibleTrigger;
 
             // เมื่อ focus เข้า trigger => แสดง tooltip
             possibleTrigger.addEventListener('focus', (e) => {
-              // ถ้ายังไม่ open => show
               if (!popoverState.open) {
                 api.actions.show(e);
               }
             });
 
             // เมื่อ blur ออกจาก trigger => ปิด tooltip
-            // (แต่ถ้ายัง hover อยู่บน tooltip container => เช็คใน close() อยู่แล้ว)
             possibleTrigger.addEventListener('blur', (e) => {
-              // ถ้าเปิดอยู่ => close
               if (popoverState.open) {
                 api.actions.close(e);
               }
@@ -500,8 +509,6 @@ export function popover(options: PopoverProperty) {
         }
 
         popoverState._events?.willShow?.({ open: true });
-        // ถ้า actions.show(e) เรียกพร้อม e => เก็บเป็น triggerEl
-        // (ถ้าต้องการ override ตัวที่ได้จาก querySelector ก็ได้)
         popoverState.triggerEl = e?.currentTarget || e?.target || popoverState.triggerEl || null;
 
         // -------------------------------
@@ -714,7 +721,8 @@ export function popover(options: PopoverProperty) {
             container.removeEventListener('animationend', handleAnimationEnd!);
             handleAnimationEnd = null;
 
-            if (popoverState.triggerEl instanceof HTMLElement) {
+            // กรณี tooltip => ไม่ refocus trigger
+            if (popoverState.triggerEl instanceof HTMLElement && type !== 'tooltip') {
               popoverState.triggerEl.focus();
             }
             popoverState._events?.closed?.({ open: false });
