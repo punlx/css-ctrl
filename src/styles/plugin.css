@@ -212,9 +212,9 @@ dialog.dialogPluginFadeOutClass::backdrop {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 9999;
-  transition: opacity 300ms ease;
+  background-color: var(--DRAWER_PLUGIN_BACLDROP_BG_COLOR);
+  z-index: var(--DRAWER_PLUGIN_Z_INDEX);
+  transition: opacity var(--DRAWER_PLUGIN_FADE_DURATION) ease;
   opacity: 0;
 }
 
@@ -225,17 +225,3 @@ dialog.dialogPluginFadeOutClass::backdrop {
   transition: transform 300ms ease;
   outline: none;
 }
-/*
-
-
-  // ตัวอย่างการกำหนด initial transform (placement=left)
-  // .drawerPluginContainerLeft {
-  //   top: 0;
-  //   bottom: 0;
-  //   left: 0;
-  //   width: 300px;
-  //   transform: translateX(-100%);
-  // }
-
-  // ใช้ JS set style inline ในตัวอย่างนี้
-*/

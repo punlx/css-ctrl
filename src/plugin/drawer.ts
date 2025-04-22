@@ -193,15 +193,19 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     if (overlay) {
       overlayEl = document.createElement('div');
       overlayEl.classList.add('drawerPluginOverlay');
-      overlayEl.style.position = 'fixed';
-      overlayEl.style.top = '0';
-      overlayEl.style.left = '0';
-      overlayEl.style.right = '0';
-      overlayEl.style.bottom = '0';
-      overlayEl.style.backgroundColor = backdropColor;
-      overlayEl.style.opacity = '0';
-      overlayEl.style.transition = `opacity ${fadeDuration}ms ease`;
-      overlayEl.style.zIndex = String(zIndex);
+
+      //   ADD STYLES
+      document.documentElement.style.setProperty(
+        `--DRAWER_PLUGIN_BACLDROP_BG_COLOR`,
+        backdropColor
+      );
+
+      document.documentElement.style.setProperty(
+        `--DRAWER_PLUGIN_FADE_DURATION`,
+        `${fadeDuration}ms`
+      );
+
+      document.documentElement.style.setProperty(`--DRAWER_PLUGIN_Z_INDEX`, String(zIndex));
 
       document.body.appendChild(overlayEl);
 
