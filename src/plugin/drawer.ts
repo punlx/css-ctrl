@@ -100,12 +100,29 @@ export interface DrawerPluginOptions {
 const drawerRegistry: DrawerPluginAPI[] = [];
 
 /**
- * ตัวแปร global สำหรับนับ Drawer ที่ขอ disableBodyScroll
- * ถ้ามากกว่า 0 => document.body.style.overflow = 'hidden'
- * ถ้า =0 => restore overflow เดิม
+ * stack สำหรับเก็บค่า overflow เดิมของ body ก่อนที่จะถูก set เป็น 'hidden'
+ * ทำให้รองรับกรณีเปิด-ปิด Drawer ซ้อนกันได้ดีขึ้น
  */
-let bodyScrollDisableCount = 0;
-let oldBodyOverflow = '';
+const oldBodyOverflowStack: string[] = [];
+
+/** ฟังก์ชันเสริมสำหรับจัดการ body overflow */
+function pushBodyOverflow() {
+  oldBodyOverflowStack.push(document.body.style.overflow);
+  document.body.style.overflow = 'hidden';
+}
+function popBodyOverflow() {
+  // ถ้า stack ว่าง => ใช้ overflow=''
+  const oldVal = oldBodyOverflowStack.pop() ?? '';
+  document.body.style.overflow = oldVal;
+}
+
+/** ฟังก์ชันสำหรับลบ instance ออกจาก registry ป้องกัน memory leak */
+function removeFromRegistry(api: DrawerPluginAPI) {
+  const idx = drawerRegistry.indexOf(api);
+  if (idx !== -1) {
+    drawerRegistry.splice(idx, 1);
+  }
+}
 
 /** ฟังก์ชันหลักสำหรับสร้าง Drawer Plugin */
 export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
@@ -132,10 +149,7 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     disableBodyScroll = true,
   } = options;
 
-  /**
-   * เพิ่มเงื่อนไข:
-   * ถ้า overlay=false แต่ close==='outside-close' => Warn
-   */
+  // เตือน ถ้า overlay=false แต่ใช้ close='outside-close'
   if (!overlay && close === 'outside-close') {
     console.warn(
       `[DrawerPlugin] overlay=false + close='outside-close' means 'outside-close' won't work.\n` +
@@ -176,13 +190,9 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     storage.drawer.open = true;
     callEvent('willShow');
 
-    // ถ้าต้องการ disable body scroll
+    // ถ้าต้องการ disable body scroll => push ค่าเดิมของ overflow เข้า stack
     if (disableBodyScroll) {
-      if (bodyScrollDisableCount === 0) {
-        oldBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-      }
-      bodyScrollDisableCount++;
+      pushBodyOverflow();
     }
 
     // เก็บ previous focus
@@ -194,18 +204,13 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
       overlayEl = document.createElement('div');
       overlayEl.classList.add('drawerPluginOverlay');
 
+      // กำหนด style สำหรับ overlay โดยตรง (ไม่แตะ global)
       //   ADD STYLES
-      document.documentElement.style.setProperty(
-        `--DRAWER_PLUGIN_BACLDROP_BG_COLOR`,
-        backdropColor
-      );
+      overlayEl.style.setProperty(`--DRAWER_PLUGIN_BACLDROP_BG_COLOR`, backdropColor);
 
-      document.documentElement.style.setProperty(
-        `--DRAWER_PLUGIN_FADE_DURATION`,
-        `${fadeDuration}ms`
-      );
+      overlayEl.style.setProperty(`--DRAWER_PLUGIN_FADE_DURATION`, `${fadeDuration}ms`);
 
-      document.documentElement.style.setProperty(`--DRAWER_PLUGIN_Z_INDEX`, String(zIndex));
+      overlayEl.style.setProperty(`--DRAWER_PLUGIN_Z_INDEX`, String(zIndex));
 
       document.body.appendChild(overlayEl);
 
@@ -226,11 +231,15 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     if (describe) {
       containerEl.setAttribute('aria-describedby', `${id}-${describe}`);
     }
+
+    // inline style เฉพาะตัว container
     containerEl.style.position = 'fixed';
     containerEl.style.zIndex = String(zIndex + 1);
-    containerEl.style.transition = `transform ${fadeDuration}ms ease`;
     containerEl.style.backgroundColor = '#fff';
     containerEl.style.outline = 'none';
+    // กำหนด transition/transform เฉพาะ drawer
+    containerEl.style.transition = `transform ${fadeDuration}ms ease`;
+    containerEl.style.willChange = 'transform';
 
     // กำหนดตำแหน่งเริ่มต้น
     switch (placement) {
@@ -262,13 +271,14 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
 
     document.body.appendChild(containerEl);
 
+    // ใช้ React 18 createRoot
     const root = createRoot(containerEl);
     root.render(drawerContent);
 
     storage.drawer.containerEl = containerEl;
     storage.drawer.root = root;
 
-    // keydown => ESC (ถ้า close==='outside-close')
+    // keydown => ESC (เฉพาะ outside-close)
     if (close === 'outside-close') {
       const keydownHandler = (evt: KeyboardEvent) => {
         if (evt.key === 'Escape') {
@@ -291,14 +301,10 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
       }
       switch (placement) {
         case 'left':
-          containerEl.style.transform = 'translateX(0)';
-          break;
         case 'right':
           containerEl.style.transform = 'translateX(0)';
           break;
         case 'top':
-          containerEl.style.transform = 'translateY(0)';
-          break;
         case 'bottom':
           containerEl.style.transform = 'translateY(0)';
           break;
@@ -307,14 +313,8 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
 
     // เมื่อ transition in เสร็จ => เรียก didShow
     const onTransitionEndShow = (e: TransitionEvent) => {
-      if ((placement === 'left' || placement === 'right') && e.propertyName === 'transform') {
-        containerEl.removeEventListener('transitionend', onTransitionEndShow);
-        callEvent('show');
-        callEvent('didShow');
-      } else if (
-        (placement === 'top' || placement === 'bottom') &&
-        e.propertyName === 'transform'
-      ) {
+      // เช็คว่าเป็น transform ของ containerEl เอง
+      if (e.propertyName === 'transform' && e.target === containerEl) {
         containerEl.removeEventListener('transitionend', onTransitionEndShow);
         callEvent('show');
         callEvent('didShow');
@@ -344,12 +344,9 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
 
     const { containerEl, overlayEl, root } = storage.drawer;
 
-    // ถ้ามี disableBodyScroll => decrement
-    if (disableBodyScroll && bodyScrollDisableCount > 0) {
-      bodyScrollDisableCount--;
-      if (bodyScrollDisableCount === 0) {
-        document.body.style.overflow = oldBodyOverflow || '';
-      }
+    // ถ้ามี disableBodyScroll => pop ค่า overflow เดิมคืน
+    if (disableBodyScroll) {
+      popBodyOverflow();
     }
 
     // ถอน event listeners
@@ -388,16 +385,10 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
 
     // ฟัง transitionend => didClosed
     const onTransitionEndClose = (e: TransitionEvent) => {
-      if ((placement === 'left' || placement === 'right') && e.propertyName === 'transform') {
-        cleanup();
-      } else if (
-        (placement === 'top' || placement === 'bottom') &&
-        e.propertyName === 'transform'
-      ) {
+      if (e.propertyName === 'transform' && e.target === containerEl) {
         cleanup();
       }
     };
-
     containerEl?.addEventListener('transitionend', onTransitionEndClose);
 
     function cleanup() {
@@ -412,11 +403,21 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
       if (overlayEl && overlayEl.parentNode) {
         overlayEl.parentNode.removeChild(overlayEl);
       }
-      if (storage.drawer.previousActiveElement) {
+
+      // เช็คก่อนว่า previousActiveElement ยังอยู่ใน DOM ไหม
+      if (
+        storage.drawer.previousActiveElement &&
+        document.contains(storage.drawer.previousActiveElement)
+      ) {
         storage.drawer.previousActiveElement.focus();
       }
+
+      // เรียก event
       callEvent('closed');
       callEvent('didClosed');
+
+      // นำ instance ออกจาก registry
+      removeFromRegistry(api);
     }
   }
 
@@ -424,7 +425,7 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     return { open: storage.drawer.open };
   }
 
-  // เสริมเผื่ออยากให้ plugin รองรับ closeAll
+  // รองรับ closeAll
   function closeAll() {
     drawerRegistry.forEach((inst) => {
       inst.actions.close();
