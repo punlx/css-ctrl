@@ -1,6 +1,15 @@
 // drawer.ts
 import { createRoot, Root } from 'react-dom/client';
 
+export interface DrawerEvents {
+  willShow?: (info: { open: boolean }) => void;
+  show?: (info: { open: boolean }) => void;
+  didShow?: (info: { open: boolean }) => void;
+  willClose?: (info: { open: boolean }) => void;
+  closed?: (info: { open: boolean }) => void;
+  didClosed?: (info: { open: boolean }) => void;
+}
+
 export interface DrawerPluginAPI {
   actions: {
     show(): void;
@@ -38,16 +47,6 @@ function enableFocusTrap(container: HTMLElement): () => void {
   return () => {
     document.removeEventListener('keydown', keydownHandler);
   };
-}
-
-/** interface สำหรับ Event callback ของ Drawer */
-export interface DrawerEvents {
-  willShow?: (info: { open: boolean }) => void;
-  show?: (info: { open: boolean }) => void;
-  didShow?: (info: { open: boolean }) => void;
-  willClose?: (info: { open: boolean }) => void;
-  closed?: (info: { open: boolean }) => void;
-  didClosed?: (info: { open: boolean }) => void;
 }
 
 /** ข้อมูลภายในของ Drawer Plugin */
@@ -92,10 +91,21 @@ export interface DrawerPluginOptions {
   /** heading/describe สำหรับ aria */
   heading?: string;
   describe?: string;
+
+  /** NEW: ถ้าต้องการป้องกันการเลื่อน body (default=false) */
+  disableBodyScroll?: boolean;
 }
 
 /** สำหรับเก็บ Drawer ทั้งหมดไว้ใน registry หากต้องการ closeAll */
 const drawerRegistry: DrawerPluginAPI[] = [];
+
+/**
+ * ตัวแปร global สำหรับนับ Drawer ที่ขอ disableBodyScroll
+ * ถ้ามากกว่า 0 => document.body.style.overflow = 'hidden'
+ * ถ้า =0 => restore overflow เดิม
+ */
+let bodyScrollDisableCount = 0;
+let oldBodyOverflow = '';
 
 /** ฟังก์ชันหลักสำหรับสร้าง Drawer Plugin */
 export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
@@ -119,6 +129,7 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     zIndex = 9999,
     heading,
     describe,
+    disableBodyScroll = true,
   } = options;
 
   function callEvent(name: keyof DrawerEvents) {
@@ -153,6 +164,15 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     if (storage.drawer.open) return;
     storage.drawer.open = true;
     callEvent('willShow');
+
+    // ถ้าต้องการ disable body scroll
+    if (disableBodyScroll) {
+      if (bodyScrollDisableCount === 0) {
+        oldBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+      }
+      bodyScrollDisableCount++;
+    }
 
     // เก็บ previous focus
     storage.drawer.previousActiveElement = document.activeElement as HTMLElement;
@@ -249,13 +269,11 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
       storage.drawer.focusTrapCleanup = enableFocusTrap(containerEl);
     }
 
-    // requestAnimationFrame เพื่อให้ DOM พร้อม
+    // animate in
     requestAnimationFrame(() => {
-      // animate overlay in
       if (overlayEl) {
         overlayEl.style.opacity = '1';
       }
-      // animate drawer in
       switch (placement) {
         case 'left':
           containerEl.style.transform = 'translateX(0)';
@@ -270,13 +288,24 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
           containerEl.style.transform = 'translateY(0)';
           break;
       }
-      requestAnimationFrame(() => {
-        callEvent('show');
-        setTimeout(() => {
-          callEvent('didShow');
-        }, fadeDuration);
-      });
     });
+
+    // เมื่อ transition in เสร็จ => เรียก didShow
+    const onTransitionEndShow = (e: TransitionEvent) => {
+      if ((placement === 'left' || placement === 'right') && e.propertyName === 'transform') {
+        containerEl.removeEventListener('transitionend', onTransitionEndShow);
+        callEvent('show');
+        callEvent('didShow');
+      } else if (
+        (placement === 'top' || placement === 'bottom') &&
+        e.propertyName === 'transform'
+      ) {
+        containerEl.removeEventListener('transitionend', onTransitionEndShow);
+        callEvent('show');
+        callEvent('didShow');
+      }
+    };
+    containerEl.addEventListener('transitionend', onTransitionEndShow);
 
     // focus
     requestAnimationFrame(() => {
@@ -299,6 +328,14 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     storage.drawer.open = false;
 
     const { containerEl, overlayEl, root } = storage.drawer;
+
+    // ถ้ามี disableBodyScroll => decrement
+    if (disableBodyScroll && bodyScrollDisableCount > 0) {
+      bodyScrollDisableCount--;
+      if (bodyScrollDisableCount === 0) {
+        document.body.style.overflow = oldBodyOverflow || '';
+      }
+    }
 
     // ถอน event listeners
     if (storage.drawer.keydownHandler) {
@@ -334,8 +371,22 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
       }
     }
 
-    // รอ animation เสร็จ
-    setTimeout(() => {
+    // ฟัง transitionend => didClosed
+    const onTransitionEndClose = (e: TransitionEvent) => {
+      if ((placement === 'left' || placement === 'right') && e.propertyName === 'transform') {
+        cleanup();
+      } else if (
+        (placement === 'top' || placement === 'bottom') &&
+        e.propertyName === 'transform'
+      ) {
+        cleanup();
+      }
+    };
+
+    containerEl?.addEventListener('transitionend', onTransitionEndClose);
+
+    function cleanup() {
+      containerEl?.removeEventListener('transitionend', onTransitionEndClose);
       if (root) {
         root.unmount?.();
         storage.drawer.root = null;
@@ -346,13 +397,12 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
       if (overlayEl && overlayEl.parentNode) {
         overlayEl.parentNode.removeChild(overlayEl);
       }
-      // restore focus
       if (storage.drawer.previousActiveElement) {
         storage.drawer.previousActiveElement.focus();
       }
       callEvent('closed');
       callEvent('didClosed');
-    }, fadeDuration);
+    }
   }
 
   function getState() {
@@ -371,7 +421,7 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
       show: showDrawer,
       close: closeDrawer,
       getState,
-      closeAll, // นำไปใช้ถ้าต้องการปิด Drawer ทุกตัว
+      closeAll,
     },
     events,
     aria: {
@@ -387,8 +437,3 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
 
   return api;
 }
-
-/* -------------------------------------------------------------
-   ตัวอย่าง CSS (รวมอยู่ในไฟล์เดียวเพื่อให้เห็นภาพพร้อมใช้งาน)
-   คุณสามารถย้ายไปไฟล์ .css แยกได้ตามสะดวก
-------------------------------------------------------------- */
