@@ -55,7 +55,6 @@ interface DialogStorage extends Record<string, unknown> {
 /**
  * dialog plugin จะคืน API
  *
- * Requirement ใหม่: เปลี่ยนจาก backdropCloseable เป็น close?: "outside-close" | "close-action"
  */
 interface DialogPluginOptions {
   id: string;
@@ -63,11 +62,11 @@ interface DialogPluginOptions {
   heading: string;
   fadeDuration?: number;
   fadeScale?: number;
-  // backdropCloseable?: boolean;  // ถูกตัดออก แต่เรายังคงคอมเมนต์ไว้ตาม requirement
   close?: 'outside-close' | 'close-action'; // โดย outside-close = esc + backdrop ปิด, close-action = ปิดด้วย .close() เท่านั้น
   scroll?: 'body' | 'modal';
   backdropColor?: string;
   describe?: string;
+  states?: any;
 
   // เพิ่ม property ใหม่เพื่อใช้สร้าง headingId
 }
@@ -96,8 +95,9 @@ export function dialog(options: DialogPluginOptions) {
     describe,
     heading,
     close: closeMode = 'close-action', // rename destructured property
-    id, // รับค่าจาก options.id
-  } = options as DialogPluginOptions & { backdropCloseable?: boolean };
+    id, // รับค่าจาก options.id,
+    states,
+  } = options as DialogPluginOptions;
 
   // ===== Utility =====
 
@@ -372,5 +372,6 @@ export function dialog(options: DialogPluginOptions) {
         id: `${id}-${describe}`,
       },
     },
+    states,
   };
 }

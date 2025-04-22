@@ -24,6 +24,10 @@
       "import": "./dist/snackbar.js",
       "types": "./dist/snackbar.d.ts"
     },
+    "./drawer": {
+      "import": "./dist/drawer.js",
+      "types": "./dist/drawer.d.ts"
+    },
     "./plugin.css": "./dist/plugin.css"
   },
   "files": [

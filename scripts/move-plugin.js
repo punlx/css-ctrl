@@ -4,7 +4,7 @@ import path from 'path';
 
 const DIST = 'dist';
 const PLUGIN_DIR = path.join(DIST, 'plugin');
-const pluginFiles = ['listbox', 'dialog', 'popover', 'snackbar']; // etc.
+const pluginFiles = ['listbox', 'dialog', 'popover', 'snackbar', 'drawer']; // etc.
 
 for (const name of pluginFiles) {
   const dtsSrc = path.join(PLUGIN_DIR, name + '.d.ts');
