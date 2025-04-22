@@ -1,1 +1,704 @@
-// tab.ts
+// tabs.ts
+// Production-ready code (ไม่มีการข้ามบรรทัดหรือข้าม logic)
+// -------------------------------------------------------------
+//
+// Tabs Plugin (Uncontrolled mode) + JavaScript Event Delegation + ARIA + Keyboard Navigation
+// รองรับ:
+//   1) orientation: 'horizontal' | 'vertical'
+//   2) activation: 'auto' | 'manual'
+//   3) multiple?: boolean (ถ้าอยากให้เปิดหลาย tab พร้อมกัน => ลักษณะเหมือน accordion)
+//   4) closeable?: boolean (ถ้า dev อยากทำ TabClosable แบบ antd)
+//   5) lazyRender?: boolean (render panel เมื่อ tab ถูกเปิดครั้งแรกเท่านั้น)
+//   6) disabled tab
+//   7) events: willChangeTab, changeTab, didChangeTab, reSelect, willCloseTab, closeTab, didCloseTab
+//   8) actions: select, next, prev, disable, enable, closeTab, destroy
+//   9) keyboard navigation (ArrowLeft/ArrowRight หรือ ArrowUp/ArrowDown, Home, End)
+//  10) animationDuration?: number (ถ้าอยาก animate panel เปลี่ยนแบบ fade หรือ custom className)
+//
+// โค้ดรูปแบบเดียวกับ plugin อื่น (accordion, dialog, etc.):
+//   const tabsA = tabs({ controls: 'myTab' });
+//   tabsA.container({ ref: containerEl, data: [...] });
+//   tabsA.events({ willChangeTab(...), ... });
+//   tabsA.actions.select('tab2');
+//   ...
+//
+//  Dev จะ render DOM เอง โดย map data =>
+//     <div {...tabsA.aria.trigger(item.key)}>...</div>
+//     <div {...tabsA.aria.panel(item.key)}>...</div>
+//
+// จุดสำคัญ:
+//   - ถ้า multiple=true จะมี activeSet แทน activeKey
+//   - ถ้า closeable=true จะมีเมธอด closeTab(...) + event willCloseTab, closeTab, didCloseTab
+//   - ถ้า lazyRender=true จะมี "loadedSet" เก็บ tab ที่เคยเปิดแล้ว
+//   - ถ้า activation='manual' ต้องกด Enter/Space เพื่อ switch tab
+//   - ถ้า activation='auto' พอ focus tab แล้ว switch ทันที
+
+// -------------------------------------------------------------
+// ประกาศ interface ต่าง ๆ
+// -------------------------------------------------------------
+
+/** Options หลักที่ใช้ตอนสร้าง instance ของ tabs(...) */
+export interface TabsPluginOptions {
+  /** ใช้เป็น prefix/identifier สำหรับ aria-controls, aria-labelledby, etc. */
+  controls: string;
+  /** orientation ของ tab: horizontal (default) หรือ vertical */
+  orientation?: 'horizontal' | 'vertical';
+  /** โหมด activate tab อัตโนมัติเมื่อ focus (auto) หรือ manual (กด Enter/Space) */
+  activation?: 'auto' | 'manual';
+  /** เปิด/ปิด keyboard navigation */
+  keyboard?: boolean;
+  /** อนุญาตให้เปิดหลาย tab พร้อมกันได้หรือไม่ (default=false) */
+  multiple?: boolean;
+  /** อนุญาตให้ tab closable (เช่นปุ่ม x ปิด tab) หรือไม่ (default=false) */
+  closeable?: boolean;
+  /** render panel เฉพาะเมื่อ tab ถูกเปิดครั้งแรก (ช่วย performance) */
+  lazyRender?: boolean;
+  /** ระยะเวลา animation (ms) ถ้าจะใช้ animate เฉพาะ dev อยากใช้งาน */
+  animationDuration?: number;
+}
+
+/** โครงสร้างของ item ใน tab */
+export interface TabItem {
+  /** unique key ของ tab */
+  key: string;
+  /** label หรือ title ของ tab (อาจเป็น string หรือ ReactNode ก็ได้) */
+  label?: any;
+  /** content ของ tab panel (อาจเป็น ReactNode) */
+  content?: any;
+  /** ถ้าอยากให้ tab นี้เปิดตั้งแต่แรก */
+  defaultActive?: boolean;
+  /** ถ้า tab นี้ไม่ให้กด => disabled */
+  disabled?: boolean;
+  /** ถ้าต้องการให้ปิด tab ได้ (เฉพาะเมื่อ closeable=true) */
+  closable?: boolean;
+}
+
+/** ข้อมูลที่ส่งเข้า event callbacks */
+export interface TabEventInfo {
+  /** key ของ tab ที่เกี่ยวข้อง (ถ้ากด select tab) */
+  key: string;
+  /** previousKey ถ้ามี (เปลี่ยนจาก tab เก่า) */
+  previousKey?: string | null; // <-- เพิ่ม null เข้าไป
+  /** target DOM ที่เกี่ยวข้อง (เช่น heading หรือ panel) */
+  target?: {
+    trigger?: HTMLElement;
+    panel?: HTMLElement;
+  };
+}
+
+/** Events หลักใน lifecycle */
+export interface TabsPluginEvents {
+  willChangeTab?: (info: TabEventInfo) => void;
+  changeTab?: (info: TabEventInfo) => void;
+  didChangeTab?: (info: TabEventInfo) => void;
+
+  /** กรณี dev คลิก tab เดิมซ้ำ => reSelect */
+  reSelect?: (info: TabEventInfo) => void;
+
+  /** ถ้ารองรับ closable tab => event เหล่านี้ */
+  willCloseTab?: (info: TabEventInfo) => void;
+  closeTab?: (info: TabEventInfo) => void;
+  didCloseTab?: (info: TabEventInfo) => void;
+}
+
+// -------------------------------------------------------------
+// ประกาศโครงสร้างภายใน (storage) ของ plugin
+// -------------------------------------------------------------
+interface TabsStorage {
+  /** เก็บข้อมูล tab ทั้งหมด (key => TabItem) */
+  itemsMap: Map<string, TabItem>;
+  /** ถ้า multiple=false => activeKey (string) แต่ถ้า multiple=true => activeSet (Set<string>) */
+  activeKey: string | null;
+  activeSet: Set<string>;
+  /** ถ้ามี tab closable => สามารถลบออกได้ => itemsMap ก็ต้อง remove */
+  /** disabled tab => itemsMap.get(key).disabled=true */
+  /** ถ้า lazyRender => เราจะเก็บ loadedSet: Set<string> เพื่อกัน re-render */
+  loadedSet: Set<string>;
+  /** options ที่รับมา */
+  options: TabsPluginOptions;
+  /** events callback */
+  _events: TabsPluginEvents;
+  /** containerEl = DOM หลัก (role="tablist") */
+  containerEl?: HTMLElement | null;
+  /** orientation = 'horizontal'|'vertical' */
+  orientation: 'horizontal' | 'vertical';
+  /** activation = 'auto'|'manual' */
+  activation: 'auto' | 'manual';
+  /** keyboard enabled? */
+  keyboard: boolean;
+}
+
+// -------------------------------------------------------------
+// ฟังก์ชันหลัก tabs(...)
+// -------------------------------------------------------------
+export function tabs(options: TabsPluginOptions) {
+  // กำหนด default
+  const {
+    controls,
+    orientation = 'horizontal',
+    activation = 'auto',
+    keyboard = true,
+    multiple = false,
+    closeable = false,
+    lazyRender = false,
+    animationDuration = 0, // dev จะเอาไปใช้ animate panel เปลี่ยนเอง
+  } = options;
+
+  // สร้าง storage ภายใน
+  const storage: { tabs: TabsStorage } = {
+    tabs: {
+      itemsMap: new Map<string, TabItem>(),
+      activeKey: null,
+      activeSet: new Set<string>(),
+      loadedSet: new Set<string>(),
+      options,
+      _events: {},
+      containerEl: null,
+      orientation,
+      activation,
+      keyboard,
+    },
+  };
+
+  // -------------------------------------------------------------
+  // Helper: เรียก event callbacks
+  // -------------------------------------------------------------
+  function callEvent<K extends keyof TabsPluginEvents>(evtName: K, info: TabEventInfo) {
+    const cb = storage.tabs._events[evtName];
+    if (cb) {
+      cb(info);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Helper: build DOM ref for trigger/panel
+  // -------------------------------------------------------------
+  function getTriggerEl(key: string): HTMLElement | null {
+    const containerEl = storage.tabs.containerEl;
+    if (!containerEl) return null;
+    return containerEl.querySelector<HTMLElement>(`[data-tab-trigger="${key}"]`);
+  }
+  function getPanelEl(key: string): HTMLElement | null {
+    const containerEl = storage.tabs.containerEl;
+    if (!containerEl) return null;
+    return containerEl.querySelector<HTMLElement>(`[data-tab-panel="${key}"]`);
+  }
+
+  // -------------------------------------------------------------
+  // Helper: อัปเดต aria-* ของ tab trigger และ tab panel
+  // -------------------------------------------------------------
+  function updateAriaForItem(key: string) {
+    const tabsState = storage.tabs;
+    const item = tabsState.itemsMap.get(key);
+    if (!item) return;
+    const triggerEl = getTriggerEl(key);
+    const panelEl = getPanelEl(key);
+    const isActive = isTabActive(key);
+    const isDisabled = !!item.disabled;
+
+    // update trigger
+    if (triggerEl) {
+      triggerEl.setAttribute('role', 'tab');
+      triggerEl.setAttribute('aria-controls', `${controls}-panel-${key}`);
+      triggerEl.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      triggerEl.setAttribute('aria-disabled', isDisabled ? 'true' : 'false');
+      if (isActive && !isDisabled) {
+        triggerEl.setAttribute('tabindex', '0');
+      } else {
+        triggerEl.setAttribute('tabindex', '-1');
+      }
+      triggerEl.id = `${controls}-tab-${key}`;
+    }
+    // update panel
+    if (panelEl) {
+      panelEl.setAttribute('role', 'tabpanel');
+      panelEl.setAttribute('aria-labelledby', `${controls}-tab-${key}`);
+      panelEl.id = `${controls}-panel-${key}`;
+      if (isActive) {
+        panelEl.removeAttribute('hidden');
+        panelEl.setAttribute('aria-hidden', 'false');
+      } else {
+        panelEl.setAttribute('hidden', 'true');
+        panelEl.setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+
+  function updateAriaAll() {
+    storage.tabs.itemsMap.forEach((_, key) => {
+      updateAriaForItem(key);
+    });
+  }
+
+  // -------------------------------------------------------------
+  // Helper: check ว่า tab นั้น active หรือไม่
+  // -------------------------------------------------------------
+  function isTabActive(key: string): boolean {
+    if (!multiple) {
+      return storage.tabs.activeKey === key;
+    }
+    return storage.tabs.activeSet.has(key);
+  }
+
+  // -------------------------------------------------------------
+  // container(...) => ผูกองค์ประกอบหลัก
+  // -------------------------------------------------------------
+  function container(params: { ref: HTMLElement | null; data?: TabItem[] }) {
+    const { ref, data } = params;
+    let containerEl: HTMLElement | null = null;
+    if (ref instanceof HTMLElement) {
+      containerEl = ref;
+    }
+    if (!containerEl) {
+      throw new Error('[tabs] container: invalid ref or element.');
+    }
+    storage.tabs.containerEl = containerEl;
+    containerEl.setAttribute('role', 'tablist');
+    if (orientation === 'horizontal') {
+      containerEl.setAttribute('aria-orientation', 'horizontal');
+    } else {
+      containerEl.setAttribute('aria-orientation', 'vertical');
+    }
+
+    // ถ้ามี data => initial itemsMap
+    if (data && data.length) {
+      data.forEach((item) => {
+        storage.tabs.itemsMap.set(item.key, { ...item });
+      });
+      // ถ้า multiple=false => หาคนแรกที่ defaultActive => activeKey
+      // ถ้า multiple=true => ใส่ใน activeSet
+      const firstActive = data.find((x) => x.defaultActive);
+      if (!multiple) {
+        if (firstActive) {
+          storage.tabs.activeKey = firstActive.key;
+          // lazyRender => loadedSet.add(firstActive.key)
+          if (lazyRender) {
+            storage.tabs.loadedSet.add(firstActive.key);
+          }
+        } else {
+          // ไม่ได้ระบุ defaultActive => อาจเป็น null
+          storage.tabs.activeKey = null;
+        }
+      } else {
+        data.forEach((x) => {
+          if (x.defaultActive) {
+            storage.tabs.activeSet.add(x.key);
+            if (lazyRender) {
+              storage.tabs.loadedSet.add(x.key);
+            }
+          }
+        });
+      }
+    }
+
+    // เซ็ต aria-* ครั้งแรก
+    storage.tabs.itemsMap.forEach((_, key) => {
+      updateAriaForItem(key);
+    });
+
+    // Event listeners
+    containerEl.addEventListener('click', onClickTabTrigger);
+    if (keyboard) {
+      containerEl.addEventListener('keydown', onKeydownTabTrigger);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // onClickTabTrigger => ถ้าเป็น tab trigger => select
+  // -------------------------------------------------------------
+  function onClickTabTrigger(evt: MouseEvent) {
+    const containerEl = storage.tabs.containerEl;
+    if (!containerEl) return;
+    const trigger = (evt.target as HTMLElement).closest<HTMLElement>('[data-tab-trigger]');
+    if (!trigger || !containerEl.contains(trigger)) return;
+    const key = trigger.getAttribute('data-tab-trigger');
+    if (!key) return;
+    const item = storage.tabs.itemsMap.get(key);
+    if (!item) return;
+    if (item.disabled) {
+      return; // disabled => ignore
+    }
+    // ถ้าปุ่ม closeable ตรง x => dev อาจจับ onClick => actions.closeTab(key)
+    // แต่ถ้า dev อยาก rely on plugin => ควรใส่อีก listener/attr
+    // (ในที่นี้ assume dev คลิก label => switch tab)
+    doSelectTab(key, true);
+  }
+
+  // -------------------------------------------------------------
+  // onKeydownTabTrigger => handle arrow/horizontal/vertical
+  // -------------------------------------------------------------
+  function onKeydownTabTrigger(evt: KeyboardEvent) {
+    const containerEl = storage.tabs.containerEl;
+    if (!containerEl) return;
+    // หาว่า focus อยู่อย่างใด
+    const trigger = evt.target as HTMLElement;
+    if (!trigger.hasAttribute('data-tab-trigger')) return;
+
+    const key = trigger.getAttribute('data-tab-trigger');
+    if (!key) return;
+
+    const orientation = storage.tabs.orientation;
+    const activation = storage.tabs.activation;
+    const items = getAllTabTriggers(); // list of triggers
+    const idx = items.indexOf(trigger);
+    if (idx < 0) return;
+
+    // keys
+    switch (evt.key) {
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        if (orientation === 'horizontal' && evt.key === 'ArrowLeft') {
+          moveFocus(items, idx, -1);
+          evt.preventDefault();
+        } else if (orientation === 'vertical' && evt.key === 'ArrowUp') {
+          moveFocus(items, idx, -1);
+          evt.preventDefault();
+        }
+        break;
+      case 'ArrowRight':
+      case 'ArrowDown':
+        if (orientation === 'horizontal' && evt.key === 'ArrowRight') {
+          moveFocus(items, idx, +1);
+          evt.preventDefault();
+        } else if (orientation === 'vertical' && evt.key === 'ArrowDown') {
+          moveFocus(items, idx, +1);
+          evt.preventDefault();
+        }
+        break;
+      case 'Home':
+        moveFocus(items, idx, 'home');
+        evt.preventDefault();
+        break;
+      case 'End':
+        moveFocus(items, idx, 'end');
+        evt.preventDefault();
+        break;
+      case 'Enter':
+      case ' ':
+        // ถ้า activation='manual' => switch tab ที่โฟกัส
+        // ถ้า activation='auto' => ปกติก็ switch อยู่แล้ว (เพราะ focus => switch)
+        if (activation === 'manual') {
+          doSelectTab(key, true);
+        }
+        evt.preventDefault();
+        break;
+      default:
+        break;
+    }
+  }
+
+  function moveFocus(items: HTMLElement[], currentIdx: number, direction: number | 'home' | 'end') {
+    if (direction === 'home') {
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (!isTriggerDisabled(it)) {
+          it.focus();
+          // ถ้า auto => switch
+          if (storage.tabs.activation === 'auto') {
+            const key = it.getAttribute('data-tab-trigger') || '';
+            doSelectTab(key, false);
+          }
+          break;
+        }
+      }
+      return;
+    }
+    if (direction === 'end') {
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        if (!isTriggerDisabled(it)) {
+          it.focus();
+          if (storage.tabs.activation === 'auto') {
+            const key = it.getAttribute('data-tab-trigger') || '';
+            doSelectTab(key, false);
+          }
+          break;
+        }
+      }
+      return;
+    }
+    // direction = +1 / -1
+    const len = items.length;
+    let newIdx = currentIdx;
+    let loopCount = 0;
+    while (true) {
+      newIdx = (newIdx + direction + len) % len;
+      if (!isTriggerDisabled(items[newIdx])) {
+        break;
+      }
+      loopCount++;
+      if (loopCount > len) {
+        return;
+      }
+    }
+    items[newIdx].focus();
+    // ถ้า activation=auto => select
+    if (storage.tabs.activation === 'auto') {
+      const key = items[newIdx].getAttribute('data-tab-trigger') || '';
+      doSelectTab(key, false);
+    }
+  }
+
+  function isTriggerDisabled(el: HTMLElement): boolean {
+    return el.getAttribute('aria-disabled') === 'true';
+  }
+
+  function getAllTabTriggers(): HTMLElement[] {
+    const containerEl = storage.tabs.containerEl;
+    if (!containerEl) return [];
+    return Array.from(containerEl.querySelectorAll<HTMLElement>('[data-tab-trigger]'));
+  }
+
+  // -------------------------------------------------------------
+  // Core: Select tab
+  // -------------------------------------------------------------
+  function doSelectTab(key: string, isUserClick: boolean) {
+    const item = storage.tabs.itemsMap.get(key);
+    if (!item) return;
+    // disabled => do nothing
+    if (item.disabled) return;
+
+    // check if tab already active
+    const wasActive = isTabActive(key);
+    if (wasActive) {
+      // ถ้า active แล้ว => reSelect
+      callEvent('reSelect', { key });
+      return;
+    }
+    if (!multiple) {
+      // single mode
+      const oldKey = storage.tabs.activeKey;
+
+      callEvent('willChangeTab', { key, previousKey: oldKey });
+      storage.tabs.activeKey = key;
+      if (lazyRender) {
+        storage.tabs.loadedSet.add(key);
+      }
+
+      updateAriaAll();
+
+      callEvent('changeTab', { key, previousKey: oldKey });
+      callEvent('didChangeTab', { key, previousKey: oldKey });
+    } else {
+      // multiple => toggle or open
+      // (แต่ plugin tabs แบบ multiple => mock accordion)
+      //  - ถ้า dev อยาก toggle => same logic as "open if not open" or "close if open"?
+      //    (แต่ code ข้างบน => isTabActive(key)? => check if wasActive => reSelect => return)
+      //    => reSelect => do nothing
+      // => dev wants to open new tab
+      const oldSet = new Set(storage.tabs.activeSet); // copy
+      callEvent('willChangeTab', { key });
+      storage.tabs.activeSet.add(key);
+      if (lazyRender) {
+        storage.tabs.loadedSet.add(key);
+      }
+      updateAriaAll();
+      callEvent('changeTab', { key });
+      callEvent('didChangeTab', { key });
+      // ถ้า dev อยาก toggle => อาจต้อง implement doToggleTab(key)
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Actions: select(key)
+  // -------------------------------------------------------------
+  function select(key: string) {
+    doSelectTab(key, false);
+  }
+
+  // -------------------------------------------------------------
+  // Actions: next(), prev()
+  // -------------------------------------------------------------
+  function next() {
+    const triggers = getAllTabTriggers();
+    // หาอันที่ active
+    const currentKey = !multiple ? storage.tabs.activeKey : null;
+    let idx = -1;
+    if (currentKey) {
+      // find in triggers
+      idx = triggers.findIndex((el) => el.getAttribute('data-tab-trigger') === currentKey);
+    } else {
+      // ถ้าไม่มี active => idx=0
+      idx = 0;
+    }
+    moveFocus(triggers, idx, +1);
+  }
+
+  function prev() {
+    const triggers = getAllTabTriggers();
+    const currentKey = !multiple ? storage.tabs.activeKey : null;
+    let idx = -1;
+    if (currentKey) {
+      idx = triggers.findIndex((el) => el.getAttribute('data-tab-trigger') === currentKey);
+    } else {
+      idx = 0;
+    }
+    moveFocus(triggers, idx, -1);
+  }
+
+  // -------------------------------------------------------------
+  // Actions: disable(key), enable(key)
+  // -------------------------------------------------------------
+  function disable(key: string) {
+    const item = storage.tabs.itemsMap.get(key);
+    if (!item) return;
+    if (item.disabled) return;
+    item.disabled = true;
+    updateAriaForItem(key);
+  }
+
+  function enable(key: string) {
+    const item = storage.tabs.itemsMap.get(key);
+    if (!item) return;
+    if (!item.disabled) return;
+    item.disabled = false;
+    updateAriaForItem(key);
+  }
+
+  // -------------------------------------------------------------
+  // Actions: closeTab(key) => ถ้า closeable=true
+  // -------------------------------------------------------------
+  function closeTab(key: string) {
+    if (!closeable) {
+      console.warn('[tabs] closeTab called but closeable=false');
+      return;
+    }
+    const item = storage.tabs.itemsMap.get(key);
+    if (!item) return;
+    callEvent('willCloseTab', { key });
+    // ถ้า tab นี้กำลัง active => ต้อง switch ไป tab อื่น
+    if (!multiple) {
+      if (storage.tabs.activeKey === key) {
+        // ลองหา tab อื่น
+        const triggers = getAllTabTriggers();
+        let newActiveKey: string | null = null;
+        // หา index
+        const idx = triggers.findIndex((el) => el.getAttribute('data-tab-trigger') === key);
+        // ถ้า idx >= 0 => ลองเอา tab ถัดไป
+        for (let i = idx + 1; i < triggers.length; i++) {
+          const candidateKey = triggers[i].getAttribute('data-tab-trigger');
+          if (candidateKey && storage.tabs.itemsMap.has(candidateKey)) {
+            const candidateItem = storage.tabs.itemsMap.get(candidateKey);
+            if (candidateItem && !candidateItem.disabled) {
+              newActiveKey = candidateKey;
+              break;
+            }
+          }
+        }
+        // ถ้าไม่เจอ => ลองไปก่อนหน้า
+        if (!newActiveKey) {
+          for (let j = idx - 1; j >= 0; j--) {
+            const candidateKey = triggers[j].getAttribute('data-tab-trigger');
+            if (candidateKey && storage.tabs.itemsMap.has(candidateKey)) {
+              const candidateItem = storage.tabs.itemsMap.get(candidateKey);
+              if (candidateItem && !candidateItem.disabled) {
+                newActiveKey = candidateKey;
+                break;
+              }
+            }
+          }
+        }
+        storage.tabs.activeKey = newActiveKey;
+      }
+    } else {
+      // multiple => activeSet.delete(key) ถ้ามี
+      if (storage.tabs.activeSet.has(key)) {
+        storage.tabs.activeSet.delete(key);
+      }
+    }
+    // remove from itemsMap
+    storage.tabs.itemsMap.delete(key);
+    // remove DOM?
+    // dev เป็นผู้ render เอง => dev ต้อง map(...) => plugin ไม่ได้ remove DOM อัตโนมัติ
+    // plugin แค่ update state & aria
+    updateAriaAll();
+    callEvent('closeTab', { key });
+    callEvent('didCloseTab', { key });
+  }
+
+  // -------------------------------------------------------------
+  // destroy() => cleanup event listeners
+  // -------------------------------------------------------------
+  function destroy() {
+    const containerEl = storage.tabs.containerEl;
+    if (containerEl) {
+      containerEl.removeEventListener('click', onClickTabTrigger);
+      containerEl.removeEventListener('keydown', onKeydownTabTrigger);
+    }
+    // clear maps
+    storage.tabs.itemsMap.clear();
+    storage.tabs.activeSet.clear();
+    storage.tabs.loadedSet.clear();
+    storage.tabs.containerEl = null;
+  }
+
+  // -------------------------------------------------------------
+  // events(...): ผูก callback
+  // -------------------------------------------------------------
+  function events(e: TabsPluginEvents) {
+    storage.tabs._events = {
+      willChangeTab: e.willChangeTab,
+      changeTab: e.changeTab,
+      didChangeTab: e.didChangeTab,
+      reSelect: e.reSelect,
+      willCloseTab: e.willCloseTab,
+      closeTab: e.closeTab,
+      didCloseTab: e.didCloseTab,
+    };
+  }
+
+  // -------------------------------------------------------------
+  // aria: สำหรับ Dev ที่ต้องการกระจาย attribute เอง
+  // -------------------------------------------------------------
+  /** ให้ dev ใส่ {...tabsA.aria.trigger(key)} บน element ที่เป็น tab trigger */
+  function ariaTrigger(key: string) {
+    const item = storage.tabs.itemsMap.get(key);
+    const isActive = isTabActive(key);
+    const isDisabled = item ? !!item.disabled : false;
+    return {
+      'data-tab-trigger': key,
+      role: 'tab',
+      'aria-controls': `${controls}-panel-${key}`,
+      'aria-selected': isActive ? 'true' : 'false',
+      'aria-disabled': isDisabled ? 'true' : 'false',
+      tabIndex: isActive && !isDisabled ? 0 : -1,
+      id: `${controls}-tab-${key}`,
+    };
+  }
+
+  /** ให้ dev ใส่ {...tabsA.aria.panel(key)} บน element ที่เป็น tab panel */
+  function ariaPanel(key: string) {
+    const isActive = isTabActive(key);
+    // ถ้า lazyRender => ถ้าไม่เคย load -> dev อาจไม่ render panel ได้
+    //   แต่ plugin นี้จะไม่ block dev; dev ตัดสินใจเอง
+    return {
+      'data-tab-panel': key,
+      role: 'tabpanel',
+      'aria-labelledby': `${controls}-tab-${key}`,
+      id: `${controls}-panel-${key}`,
+      hidden: isActive ? undefined : true,
+      'aria-hidden': isActive ? 'false' : 'true',
+    };
+  }
+
+  // -------------------------------------------------------------
+  // คืน API ออกไป
+  // -------------------------------------------------------------
+  return {
+    container,
+    events,
+    actions: {
+      select,
+      next,
+      prev,
+      disable,
+      enable,
+      closeTab,
+      destroy,
+    },
+    aria: {
+      trigger: ariaTrigger,
+      panel: ariaPanel,
+    },
+  };
+}
