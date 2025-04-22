@@ -1,5 +1,5 @@
 // accordion.ts
-// Accordion Plugin แบบ Uncontrolled Mode
+// Accordion Plugin แบบ Uncontrolled Mode + JavaScript Animate
 // Production-ready code (ไม่มีการข้ามบรรทัดหรือข้าม logic)
 // -------------------------------------------------------------
 
@@ -11,7 +11,7 @@ export interface AccordionPluginOptions {
   multiple?: boolean;
   /** panel ที่เปิดอยู่สามารถกดซ้ำแล้วปิดได้หรือไม่ (default=true) */
   collapsible?: boolean;
-  /** ระยะเวลาทรานสิชัน (ms) ถ้าต้องการใช้กับ CSS Transition. (ไม่ได้บังคับใช้ในโค้ดนี้) */
+  /** ระยะเวลาทรานสิชัน (ms) ถ้าต้องการใช้กับ CSS Transition. (แต่เราจะนำมาใช้ใน JS animation) */
   animationDuration?: number;
   /** ชื่อ role ของ container (เช่น 'region', หรือไม่กำหนดก็ได้) */
   containerRole?: string;
@@ -86,6 +86,38 @@ interface AccordionStorage {
   containerEl?: HTMLElement | null;
 }
 
+/** ฟังก์ชันช่วย animate height ด้วย requestAnimationFrame */
+function animateHeight(params: {
+  el: HTMLElement;
+  from: number;
+  to: number;
+  duration: number;
+  callback?: () => void;
+}) {
+  const { el, from, to, duration, callback } = params;
+  let startTime: number | null = null;
+
+  function step(timestamp: number) {
+    if (startTime === null) {
+      startTime = timestamp;
+    }
+    const elapsed = timestamp - startTime;
+    let progress = elapsed / duration;
+    if (progress > 1) progress = 1;
+
+    const currentHeight = from + (to - from) * progress;
+    el.style.height = currentHeight + 'px';
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      if (callback) callback();
+    }
+  }
+
+  requestAnimationFrame(step);
+}
+
 /** ประกาศฟังก์ชันหลัก accordion(...) */
 export function accordion(options: AccordionPluginOptions) {
   // กำหนด default ของ multiple=false, collapsible=true
@@ -157,13 +189,9 @@ export function accordion(options: AccordionPluginOptions) {
       panelEl.setAttribute('role', 'region');
       panelEl.setAttribute('aria-labelledby', `${controls}-heading-${key}`);
       panelEl.id = `${controls}-panel-${key}`;
-      if (isOpen) {
-        panelEl.removeAttribute('hidden');
-        panelEl.setAttribute('aria-hidden', 'false');
-      } else {
-        panelEl.setAttribute('hidden', 'true');
-        panelEl.setAttribute('aria-hidden', 'true');
-      }
+
+      // แต่ยังคงสั่ง aria-hidden ให้ถูกต้อง (สำหรับ Screen Reader)
+      panelEl.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
     }
   }
 
@@ -202,6 +230,28 @@ export function accordion(options: AccordionPluginOptions) {
     storage.accordion.itemsMap.forEach((_, key) => {
       setAriaForItem(key);
     });
+
+    // -----------------------------------------------
+    // [* เพิ่มเติม *]: ซ่อน panel ที่ไม่ได้เปิดตั้งแต่แรก
+    // -----------------------------------------------
+    storage.accordion.itemsMap.forEach((_, key) => {
+      const isOpen = storage.accordion.openSet.has(key);
+      const containerNode = storage.accordion.containerEl;
+      if (!containerNode) return;
+      const panelEl = containerNode.querySelector<HTMLElement>(`[data-accordion-panel="${key}"]`);
+      if (!panelEl) return;
+      if (!isOpen) {
+        // ถ้าไม่ได้เปิด => ซ่อน + ตั้ง height=0 ไว้ก่อน
+        panelEl.setAttribute('hidden', 'true');
+        panelEl.style.height = '0px';
+      } else {
+        // ถ้าเปิด => แสดง + height:auto
+        panelEl.removeAttribute('hidden');
+        panelEl.style.height = 'auto';
+      }
+    });
+    // -----------------------------------------------
+
     // ผูก event listener (click, keydown)
     containerEl.addEventListener('click', onClickHeading);
     containerEl.addEventListener('keydown', onKeydownHeading);
@@ -261,10 +311,37 @@ export function accordion(options: AccordionPluginOptions) {
       callEvent('willOpen', { key, data: beforeData });
       storage.accordion.openSet.add(key);
       setAriaForItem(key);
-      const afterData = buildDataSnapshot();
-      callEvent('open', { key, data: afterData });
-      // ถ้าต้องการ delay หรือ effect หลัง animation ค่อย call didOpen
-      callEvent('didOpen', { key, data: afterData });
+
+      const containerEl = storage.accordion.containerEl;
+      if (!containerEl) return;
+      const panelEl = containerEl.querySelector<HTMLElement>(`[data-accordion-panel="${key}"]`);
+      if (panelEl) {
+        // เตรียมให้วัด scrollHeight ได้
+        panelEl.removeAttribute('hidden'); // ปลดซ่อนก่อน (ถ้ามี)
+        panelEl.style.overflow = 'hidden';
+        // เริ่มจากสูง 0 (หรือจะเริ่มจากค่าที่มีอยู่ก็ได้ ถ้ามีกรณีพิเศษ)
+        panelEl.style.height = '0px';
+
+        // เรียก open event
+        const afterData = buildDataSnapshot();
+        callEvent('open', { key, data: afterData });
+
+        // animate จาก 0 -> scrollHeight
+        const targetHeight = panelEl.scrollHeight;
+        animateHeight({
+          el: panelEl,
+          from: 0,
+          to: targetHeight,
+          duration: animationDuration,
+          callback: () => {
+            // แอนิเมชันเสร็จ
+            panelEl.style.height = 'auto';
+            panelEl.style.overflow = '';
+            // เรียก didOpen หลัง animation
+            callEvent('didOpen', { key, data: buildDataSnapshot() });
+          },
+        });
+      }
     }
   }
 
@@ -283,9 +360,35 @@ export function accordion(options: AccordionPluginOptions) {
       callEvent('willClose', { key, data: beforeData });
       storage.accordion.openSet.delete(key);
       setAriaForItem(key);
-      const afterData = buildDataSnapshot();
-      callEvent('close', { key, data: afterData });
-      callEvent('didClose', { key, data: afterData });
+
+      const containerEl = storage.accordion.containerEl;
+      if (!containerEl) return;
+      const panelEl = containerEl.querySelector<HTMLElement>(`[data-accordion-panel="${key}"]`);
+      if (panelEl) {
+        // อ่านความสูงปัจจุบัน (เผื่อมี animation ค้าง)
+        const currentHeight = panelEl.scrollHeight;
+        panelEl.style.overflow = 'hidden';
+
+        // เรียก close event ตรงนี้ก่อน animate
+        const afterData = buildDataSnapshot();
+        callEvent('close', { key, data: afterData });
+
+        // animate จาก currentHeight -> 0
+        animateHeight({
+          el: panelEl,
+          from: currentHeight,
+          to: 0,
+          duration: animationDuration,
+          callback: () => {
+            // แอนิเมชันเสร็จ
+            panelEl.style.height = '';
+            panelEl.style.overflow = '';
+            panelEl.setAttribute('hidden', 'true'); // ซ่อน panel จริง ๆ
+            // เรียก didClose หลัง animation
+            callEvent('didClose', { key, data: buildDataSnapshot() });
+          },
+        });
+      }
     }
   }
 
@@ -380,8 +483,6 @@ export function accordion(options: AccordionPluginOptions) {
     snapshot.forEach((item) => {
       const isOpen = storage.accordion.openSet.has(item.key);
       const isDisabled = storage.accordion.disabledSet.has(item.key);
-      // เราอาจเก็บลง field เฉพาะกิจก็ได้ เช่น item.currentOpen = isOpen
-      // หรือ item.currentDisabled = isDisabled
       (item as any).currentOpen = isOpen;
       (item as any).currentDisabled = isDisabled;
     });
@@ -451,7 +552,8 @@ export function accordion(options: AccordionPluginOptions) {
       role: 'region',
       'aria-labelledby': `${controls}-heading-${key}`,
       id: `${controls}-panel-${key}`,
-      hidden: isOpen ? undefined : true,
+      // ไม่เซ็ต hidden ตรงนี้ เพื่อให้ animation ทำงาน
+      // hidden: isOpen ? undefined : true,
       'aria-hidden': isOpen ? 'false' : 'true',
     };
   }
