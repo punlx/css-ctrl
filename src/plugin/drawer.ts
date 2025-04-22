@@ -132,6 +132,17 @@ export function drawer(options: DrawerPluginOptions): DrawerPluginAPI {
     disableBodyScroll = true,
   } = options;
 
+  /**
+   * เพิ่มเงื่อนไข:
+   * ถ้า overlay=false แต่ close==='outside-close' => Warn
+   */
+  if (!overlay && close === 'outside-close') {
+    console.warn(
+      `[DrawerPlugin] overlay=false + close='outside-close' means 'outside-close' won't work.\n` +
+        `You must close the Drawer manually via drawerInstance.actions.close(), or use close='close-action' instead.`
+    );
+  }
+
   function callEvent(name: keyof DrawerEvents) {
     const cb = storage.drawer._events[name];
     if (cb) {
