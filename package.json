@@ -28,6 +28,10 @@
       "import": "./dist/drawer.js",
       "types": "./dist/drawer.d.ts"
     },
+    "./accordion": {
+      "import": "./dist/accordion.js",
+      "types": "./dist/accordion.d.ts"
+    },
     "./plugin.css": "./dist/plugin.css"
   },
   "files": [

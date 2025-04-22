@@ -176,3 +176,7 @@ export const appcss = css<{ modal: [] }>`
 `;
 
 ```
+
+keep
+
+      'data-accordion-heading': key, <-- ให้ query ด้วย id แทน

@@ -225,3 +225,11 @@ dialog.dialogPluginFadeOutClass::backdrop {
   transition: transform 300ms ease;
   outline: none;
 }
+
+/* accord */
+
+.accordionPanel {
+  overflow: hidden;
+  height: 0;
+  transition: height 0.3s ease;
+}
