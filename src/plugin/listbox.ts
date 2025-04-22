@@ -1,4 +1,4 @@
-// src/plugin/select.ts
+// src/plugin/listbox.ts
 
 /** โครงสร้างข้อมูลสำหรับ DataItem */
 interface DataItem {
@@ -13,7 +13,7 @@ interface LazyLoadOptions {
   nextLoad?: number;
 }
 
-/** ตัวเลือกตั้งต้นของ select plugin
+/** ตัวเลือกตั้งต้นของ listbox plugin
  * เพิ่ม <T extends DataItem = DataItem> เพื่อใช้เป็น Generic
  */
 interface SelectOptions<T extends DataItem = DataItem> {
