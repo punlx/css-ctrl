@@ -150,6 +150,7 @@ export const appcss = css<{ modal: [] }>`
 
   .box {
 
+    /* เพิ่ม listbox */
     option-active( ... ) <-- .app_box.listboxPlugin-optionActive {css}
     option-selected( ... ) <-- .app_box[aria-selected="true"] {css}
     option-unselected( ... ) <-- .app_box[aria-selected="false"] {css}
@@ -167,6 +168,10 @@ export const appcss = css<{ modal: [] }>`
     @query &:option-disabled { <-- .app_box [aria-disabled="true"] {css}
     }
 
+    /* เพิ่ม container อื่นๆ */
+    drawer-container()  <-- .drawerPluginContainer:has(.app_box) {...}
+    dialog-container()  <-- .dialogPluginContainer:has(.app_box) {...}
+    snackbar-container() <-- .snackbarPluginItem:has(.app_box) {...}
   }
 `;
 
