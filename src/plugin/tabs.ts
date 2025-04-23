@@ -607,8 +607,8 @@ export function tabs(options: TabsPluginOptions) {
       'data-tab-trigger': key,
       role: 'tab',
       'aria-controls': `${controls}-panel-${key}`,
-      'aria-selected': isActive ? 'true' : 'false',
-      'aria-disabled': isDisabled ? 'true' : 'false',
+      'aria-selected': isActive ? true : false,
+      'aria-disabled': isDisabled ? true : false,
       tabIndex: isActive && !isDisabled ? 0 : -1,
       id: `${controls}-tab-${key}`,
     };
@@ -622,7 +622,7 @@ export function tabs(options: TabsPluginOptions) {
       'aria-labelledby': `${controls}-tab-${key}`,
       id: `${controls}-panel-${key}`,
       hidden: isActive ? undefined : true,
-      'aria-hidden': isActive ? 'false' : 'true',
+      'aria-hidden': isActive ? false : true,
     };
   }
 

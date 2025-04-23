@@ -631,8 +631,8 @@ export function accordion(options: AccordionPluginOptions) {
       'data-accordion-heading': key,
       role: 'button',
       tabIndex: isDisabled ? -1 : 0,
-      'aria-disabled': isDisabled ? 'true' : 'false',
-      'aria-expanded': isOpen ? 'true' : 'false',
+      'aria-disabled': isDisabled ? true : false,
+      'aria-expanded': isOpen ? true : false,
       'aria-controls': `${controls}-panel-${key}`,
       id: `${controls}-heading-${key}`,
     };
@@ -645,7 +645,7 @@ export function accordion(options: AccordionPluginOptions) {
       role: 'region',
       'aria-labelledby': `${controls}-heading-${key}`,
       id: `${controls}-panel-${key}`,
-      'aria-hidden': isOpen ? 'false' : 'true',
+      'aria-hidden': isOpen ? false : true,
     };
   }
 
