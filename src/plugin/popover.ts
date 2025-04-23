@@ -555,6 +555,7 @@ export function popover(options: PopoverProperty) {
           popoverState.triggerEl.setAttribute('aria-controls', container.id);
         }
 
+        // ผูก Outside Click เฉพาะกรณี close = 'outside-click'
         if (close === 'outside-click') {
           setTimeout(() => {
             popoverState.outsideClickHandler = (evt: MouseEvent) => {
@@ -575,13 +576,17 @@ export function popover(options: PopoverProperty) {
           }, 0);
         }
 
-        popoverState.keydownHandler = (evt: KeyboardEvent) => {
-          if (evt.key === 'Escape') {
-            api.actions.close(evt);
-          }
-        };
-        document.addEventListener('keydown', popoverState.keydownHandler);
+        // ผูก keydown ฟัง ESC เฉพาะกรณี close != 'close-action'
+        if (close !== 'close-action') {
+          popoverState.keydownHandler = (evt: KeyboardEvent) => {
+            if (evt.key === 'Escape') {
+              api.actions.close(evt);
+            }
+          };
+          document.addEventListener('keydown', popoverState.keydownHandler);
+        }
 
+        // ถ้า trapFocus = true (และไม่ใช่ tooltip) → ใช้งาน focusTrap
         if (finalTrapFocus) {
           popoverState.focusTrapCleanup = enableFocusTrap(container);
         }

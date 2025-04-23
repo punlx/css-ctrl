@@ -163,7 +163,6 @@ dialog.dialogPluginFadeOutClass::backdrop {
 /* Fade in (เหมือนเดิม) */
 .snackbarPluginFadeInClass {
   opacity: 0;
-  transform: translateY(-8px);
   animation: snackbarPluginFadeIn var(--snackbarPluginFadeDuration, 300ms) ease forwards;
 }
 
@@ -176,32 +175,19 @@ dialog.dialogPluginFadeOutClass::backdrop {
 @keyframes snackbarPluginFadeIn {
   from {
     opacity: 0;
-    transform: translateY(-8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
 @keyframes snackbarPluginFadeOut {
   from {
     opacity: 1;
-    transform: translateY(0);
   }
   to {
     opacity: 0;
-    transform: translateY(-8px);
   }
-}
-
-/* Overlay ตัวอย่าง top-right */
-.snackbarPluginTopRightOverlay {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  width: auto;
-  height: auto;
 }
 
 /* drawer */
