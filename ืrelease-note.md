@@ -53,28 +53,49 @@ export const appcss = css<{ modal: [] }>`
   .box {
 
     /* เพิ่ม listbox */
-    option-active( ... ) <-- .app_box.listboxPlugin-optionActive {css}
-    option-selected( ... ) <-- .app_box[aria-selected="true"] {css}
-    option-unselected( ... ) <-- .app_box[aria-selected="false"] {css}
-    option-disabled( ... ) <-- .app_box[aria-disabled="true"] {css}
+    option-active( ... ) <-- .app_box.listboxPlugin-active {css}
+    option-selected( ... ) <-- .app_box.listboxPlugin-selected[aria-selected="true"] {css}
+    option-unselected( ... ) <-- .app_box.listboxPlugin-unselected[aria-selected="false"] {css}
+    option-disabled( ... ) <-- .app_box.listboxPlugin-disabled[aria-disabled="true"] {css}
 
-    @query :option-active { <-- .app_box .listboxPlugin-optionActive {css}
+    @query :option-active { <-- .app_box .listboxPlugin-active {css}
     }
 
-    @query :option-selected { <-- .app_box [aria-selected="true"] {css}
+    @query :option-selected { <-- .app_box .listboxPlugin-selected[aria-selected="true"] {css}
     }
 
-    @query &:option-unselected { <-- .app_box [aria-selected="false"] {css}
+    @query &:option-unselected { <-- .app_box.listboxPlugin-unselected[aria-selected="false"] {css}
     }
 
-    @query &:option-disabled { <-- .app_box [aria-disabled="true"] {css}
+    @query &:option-disabled { <-- .app_box.listboxPlugin-disabled [aria-disabled="true"] {css}
     }
 
-    /* เพิ่ม container อื่นๆ */
+    /* เพิ่ม accordion */
+    accordion-active( ... ) <-- .app_box.accordionPlugin-active {css}
+    accordion-expanded( ... ) <-- .app_box.accordionPlugin-expanded[aria-expanded="true"] {css}
+    accordion-collapsed( ... ) <-- .app_box.accordionPlugin-collapsed[aria-expanded="false"] {css}
+    accordion-disabled( ... ) <-- .app_box.accordionPlugin-disabled[aria-disabled="true"] {css}
+
+    @query :accordion-active { <-- .app_box .accordionPlugin-active {css}
+    }
+
+    @query :accordion-expanded { <-- .app_box .accordionPlugin-expanded[aria-expanded="true"] {css}
+    }
+
+    @query &:accordion-collapsed { <-- .app_box.accordionPlugin-collapsed[aria-expanded="false"] {css}
+    }
+
+    @query &:accordion-disabled { <-- .app_box.accordionPlugin-disabled[aria-disabled="true"] {css}
+    }
+
+
+    /* เพิ่ม container อื่นๆ (ใช้ใน query ไม่ได้)*/
     drawer-container()  <-- .drawerPluginContainer:has(.app_box) {...}
     dialog-container()  <-- .dialogPluginContainer:has(.app_box) {...}
     snackbar-container() <-- .snackbarPluginContainer:has(.app_box) {...}
     popover-container() <-- .popoverPluginContainer:has(.app_box) {...}
+
+
   }
 `;
 
