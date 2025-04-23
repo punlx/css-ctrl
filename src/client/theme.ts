@@ -150,4 +150,5 @@ export const theme = {
   variable(variableMap: Record<string, string>) {},
 
   define(styleMap: Record<string, Record<string, string>>) {},
+  class(classMap: Record<string, Record<string, string>>) {},
 };
