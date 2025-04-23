@@ -11,104 +11,6 @@ bg[red]
 
 ---
 
-ถ้ามีการกำหนด theme.plugin({
-react: {createRoot}
-})
-
-ให้ generate css แบบนั้นใน css-ctrl.theme.css ด้วย
-
-```css
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #1e1e1e; /* สีพื้นหลังของ scrollbar track */
-}
-
-::-webkit-scrollbar-thumb {
-  background-color: #555; /* สีของแท่ง scrollbar */
-  border-radius: 4px;
-  border: 2px solid #1e1e1e; /* ขอบให้เข้ากับ track */
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background-color: #777;
-}
-
-dialog:-internal-dialog-in-top-layer {
-  max-width: 100%;
-  max-height: var(--dialogInternalPluginMaxHeight);
-}
-
-dialog {
-  position: absolute;
-  display: flex;
-  justify-content: center;
-  width: var(--dialogPluginWidth);
-  background-color: transparent;
-  border-style: none;
-  padding: 0;
-}
-
-dialog[open] {
-  opacity: 0;
-  transform: var(--dialogPluginFadeScale);
-  animation: dialogPluginFadeIn var(--dialogPluginFadeDuration) ease-out forwards;
-}
-
-dialog.dialogPluginFadeOutClass {
-  animation: dialogPluginFadeOut var(--dialogPluginFadeDuration) ease-in forwards;
-}
-
-@keyframes dialogPluginFadeIn {
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes dialogPluginFadeOut {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: var(--dialogPluginFadeScale);
-  }
-}
-
-dialog[open]::backdrop {
-  animation: dialogPluginFadeBackdropIn var(--dialogPluginFadeDuration) ease-out forwards;
-}
-
-dialog.dialogPluginFadeOutClass::backdrop {
-  animation: dialogPluginFadeBackdropOut var(--dialogPluginFadeDuration) ease-in forwards;
-}
-
-@keyframes dialogPluginFadeBackdropIn {
-  from {
-    background-color: rgba(0, 0, 0, 0);
-  }
-  to {
-    background-color: var(--dialogPluginBackdropColor);
-  }
-}
-
-@keyframes dialogPluginFadeBackdropOut {
-  from {
-    background-color: var(--dialogPluginBackdropColor);
-  }
-  to {
-    background-color: rgba(0, 0, 0, 0);
-  }
-}
-```
-
----
-
 ```css
 .box {
   <parent div { <-- ใช้ได้ภายใต้ .box เท่านั้นไม่สามารถใช้ได้ใน @query
@@ -171,12 +73,9 @@ export const appcss = css<{ modal: [] }>`
     /* เพิ่ม container อื่นๆ */
     drawer-container()  <-- .drawerPluginContainer:has(.app_box) {...}
     dialog-container()  <-- .dialogPluginContainer:has(.app_box) {...}
-    snackbar-container() <-- .snackbarPluginItem:has(.app_box) {...}
+    snackbar-container() <-- .snackbarPluginContainer:has(.app_box) {...}
+    popover-container() <-- .popoverPluginContainer:has(.app_box) {...}
   }
 `;
 
 ```
-
-keep
-
-      'data-accordion-heading': key, <-- ให้ query ด้วย id แทน

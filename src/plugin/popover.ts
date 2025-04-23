@@ -409,7 +409,7 @@ export function popover(options: PopoverProperty) {
         }
 
         container.tabIndex = -1;
-        container.classList.add('popoverPlugin');
+        container.classList.add('popoverPluginContainer');
         if (typeof zIndex === 'number') {
           container.style.zIndex = String(zIndex);
         }

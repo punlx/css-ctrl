@@ -93,7 +93,7 @@ dialog.dialogPluginFadeOutClass::backdrop {
 /* .popoverPlugin.popoverPluginFadeInClass {
     animation: popoverPluginFadeIn 300ms ease-in forwards;
   } */
-.popoverPlugin {
+.popoverPluginContainer {
   /* ให้ค่าเริ่มต้น position เป็น absolute */
   position: absolute;
   top: 0;
@@ -124,7 +124,7 @@ dialog.dialogPluginFadeOutClass::backdrop {
   }
 }
 /* snackbar.css */
-/* snackbarPluginItem => แต่ละ snackbar, absolute positioning, transition top */
+/* snackbarPluginContainer => แต่ละ snackbar, absolute positioning, transition top */
 
 .snackbarPluginTopLeftOverlay,
 .snackbarPluginTopCenterOverlay,
@@ -139,19 +139,19 @@ dialog.dialogPluginFadeOutClass::backdrop {
   pointer-events: none;
 }
 
-.snackbarPluginTopCenterOverlay > .snackbarPluginItem,
-.snackbarPluginBottomCenterOverlay > .snackbarPluginItem {
+.snackbarPluginTopCenterOverlay > .snackbarPluginContainer,
+.snackbarPluginBottomCenterOverlay > .snackbarPluginContainer {
   left: 50%;
   transform: translateX(-50%) !important;
 }
 
-.snackbarPluginLeftCenterOverlay > .snackbarPluginItem,
-.snackbarPluginRightCenterOverlay > .snackbarPluginItem {
+.snackbarPluginLeftCenterOverlay > .snackbarPluginContainer,
+.snackbarPluginRightCenterOverlay > .snackbarPluginContainer {
   top: 50%;
   transform: translateY(-50%) !important;
 }
 
-.snackbarPluginItem {
+.snackbarPluginContainer {
   position: absolute; /* สำคัญ! จะจัดวางด้วย JS */
   right: 0; /* ถ้าต้อง left => left:0; */
   transition: top 0.3s ease; /* ให้เลื่อนลง/ขึ้นสมูท */
@@ -170,7 +170,7 @@ dialog.dialogPluginFadeOutClass::backdrop {
 .snackbarPluginFadeOutClass {
   animation: snackbarPluginFadeOut var(--snackbarPluginFadeDuration, 300ms) ease forwards;
 }
-.snackbarPluginBottomRightOverlay .snackbarPluginItem {
+.snackbarPluginBottomRightOverlay .snackbarPluginContainer {
   transition: bottom 0.3s ease-in-out, opacity 0.3s ease-in-out;
 }
 @keyframes snackbarPluginFadeIn {

@@ -233,7 +233,7 @@ export function snackbar(options: SnackbarPluginOptions) {
     });
 
     const itemDiv = document.createElement('div');
-    itemDiv.classList.add('snackbarPluginItem');
+    itemDiv.classList.add('snackbarPluginContainer');
     itemDiv.classList.add(FADE_IN_CLASS);
 
     if (heading) itemDiv.setAttribute('aria-labelledby', `${controls}-${heading}`);
