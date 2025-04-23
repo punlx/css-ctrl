@@ -73,7 +73,7 @@ interface SelectCallbackInfo<T> {
   };
 }
 
-/** 5 callback ใน events(...) + Lazy Load 4 ตัว
+/** 5 callback ใน events(...) + Lazy Load 3 ตัวที่เหลือ (ตัด firstLoad ออก)
  * เพิ่ม <T> เพื่อให้แต่ละ event รับ/ส่งเป็น T[]
  */
 interface SelectEvents<T> {
@@ -83,9 +83,7 @@ interface SelectEvents<T> {
   unSelect?: (info: SelectCallbackInfo<T>) => void;
   reSelect?: (info: SelectCallbackInfo<T>) => void;
 
-  /** ----- Event ใหม่สำหรับ Lazy Load ----- */
-  /** เรียกครั้งแรกตอน mount หรือ init ส่วนของ lazyLoad */
-  firstLoad?: (newData: T[]) => void;
+  /** ----- Event สำหรับ Lazy Load (ยกเว้น firstLoad ที่ย้ายไป container) ----- */
   /** เรียกเมื่อ scroll ถึงล่างสุดก่อน load ถัดไป */
   willLoad?: (newData: T[]) => void;
   /** เรียกหลังจากโหลดเพิ่มเสร็จ (ต่อจาก willLoad) */
@@ -93,7 +91,7 @@ interface SelectEvents<T> {
   /** เรียกหลัง loaded อีกที (จะเรียกซ้ำข้อมูลเดิม) */
   didLoaded?: (newData: T[]) => void;
 
-  /** ----- Event ใหม่สำหรับ Search ----- */
+  /** ----- Event สำหรับ Search ----- */
   /** เรียกก่อนจะเริ่ม filter (คืนค่า data ชุดเดิม หรือข้อมูลที่จะใช้ค้นหา) */
   willSearch?: (newData: T[]) => void;
   /** เรียกเมื่อได้ผลลัพธ์ filter แล้ว (matched items) */
@@ -101,24 +99,26 @@ interface SelectEvents<T> {
   /** เรียกหลัง searched อีกที (ถ้าต้องการทำงานต่อ) */
   didSearched?: (newData: T[]) => void;
 
-  /** ----- Event ใหม่สำหรับ Focus ----- */
+  /** ----- Event สำหรับ Focus ----- */
   willFocus?: (info: SelectCallbackInfo<T>) => void;
   focused?: (info: SelectCallbackInfo<T>) => void;
   didFocus?: (info: SelectCallbackInfo<T>) => void;
 }
 
 /** ข้อมูลสำหรับ init(...)
- * เพิ่ม <T> เพื่อ data?: T[]
- * (ในที่นี้ ไม่ต้องมี valueKey อีกต่อไป)
+ * เพิ่ม <T> เพื่อ data?: T[], และเพิ่ม onFirstLoad สำหรับ callback ของการโหลดรอบแรก
  */
 interface InitParams<T> {
   ref: HTMLElement;
   data?: T[];
+
+  /** callback สำหรับกรณีโหลดชุดแรก (แทน firstLoad ใน events) */
+  init?: (newData: T[]) => void;
 }
 
 /** interface ของ storage ที่ plugin จะใช้
  * เพิ่ม <T> เพื่อรองรับ selectedItems: SelectedItem<T>
- * และ _selectData?: T[]
+ * และ _selectData?: T[], _currentLoadedData?: T[]
  */
 interface SelectStorage<T> extends Record<string, unknown> {
   select: {
@@ -128,7 +128,7 @@ interface SelectStorage<T> extends Record<string, unknown> {
     unselectAllowed: boolean;
     containerEl?: HTMLElement;
     _selectData?: T[];
-    /** ----- เพิ่ม _currentLoadedData สำหรับเก็บข้อมูลที่ “โหลดแล้ว” ----- */
+    /** เก็บข้อมูลที่ “โหลดแล้ว” (Lazy Load) */
     _currentLoadedData?: T[];
 
     /** เก็บข้อมูล item ปัจจุบันที่โฟกัสหรือ active อยู่ (สำหรับ aria-activedescendant) */
@@ -136,25 +136,19 @@ interface SelectStorage<T> extends Record<string, unknown> {
     /** เก็บ index ล่าสุดที่คลิก (ใช้ใน multi-select + shiftKey) */
     lastIndexClicked: number | null;
 
-    /** ----- State สำหรับ Lazy Load ----- */
+    /** State สำหรับ Lazy Load */
     lazyState?: {
       currentIndex: number; // เก็บจำนวน item ที่ load ไปแล้ว
     };
+
+    /** เก็บ Param ที่ส่งให้ container เพื่อเข้าถึง onFirstLoad */
+    containerParams?: InitParams<T>;
   };
 }
 
 /**
  * สุดท้าย: export function listbox(...)
  * เพิ่ม <T extends DataItem = DataItem> เพื่อให้เป็น Generic
- * - เปลี่ยนมาใช้ type: 'single-select' | 'multi-select' | 'single-then-multi'
- * - มี destroy() สำหรับ cleanup
- * - รองรับ Home/End ใน keyboard navigation
- * - moveFocus() จะข้าม items ที่ aria-disabled="true"
- * - รองรับ shift+click / ctrl+click ในโหมด multi หรือ single-then-multi (ที่เปลี่ยนเป็น multi)
- * - มี focusItem() เรียกโฟกัส item ใดๆ โดยไม่ select
- * - เพิ่ม autoScroll + scrollBehavior เพื่อเลื่อน scrollIntoView
- * - เพิ่ม lazyLoad (firstLoad / nextLoad) + event firstLoad, willLoad, loaded, didLoaded
- * - เพิ่ม structure (แทน valueKey เดิม) ใช้ในการ extract ค่าจาก item
  */
 export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>) {
   const {
@@ -195,6 +189,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     },
   };
 
+  // --------------------------------------------------------------------------
+  // ฟังก์ชันช่วยเลื่อน scroll
+  // --------------------------------------------------------------------------
   function scrollToItem(el: HTMLElement) {
     if (!autoScroll) return;
     el.scrollIntoView({
@@ -204,12 +201,18 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     });
   }
 
+  // --------------------------------------------------------------------------
+  // container(...) => สำหรับ initialize + ใส่ ref, data, onFirstLoad
+  // --------------------------------------------------------------------------
   function container(params: InitParams<T>) {
-    const { ref, data } = params;
+    const { ref, data, init: onFirstLoad } = params;
+
+    // เก็บ params ไว้ใน storage เพื่อจะใช้ onFirstLoad ใน doFirstLoad
+    storage.select.containerParams = params;
+
     ref.role = 'listbox';
     ref.id = id;
     ref.tabIndex = 0;
-
     ref.ariaMultiSelectable = selectMode === 'multi' ? 'true' : 'false';
 
     storage.select.containerEl = ref;
@@ -226,6 +229,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     ref.onclick = handleContainerClick;
     ref.onkeydown = handleKeyDown;
 
+    // ถ้ามี lazyLoad และมี data ให้โหลดชุดแรก
     if (lazyLoad && data && data.length) {
       doFirstLoad(data, lazyLoad.firstLoad);
       ref.onscroll = (evt) => {
@@ -235,10 +239,14 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         }
       };
     } else {
+      // กรณีไม่มี lazyLoad หรือไม่มี data
       storage.select._currentLoadedData = data || [];
     }
   }
 
+  // --------------------------------------------------------------------------
+  // events(...) => สำหรับตั้งค่า callback (ยกเว้น firstLoad ที่ย้ายไป container)
+  // --------------------------------------------------------------------------
   function events(ev: SelectEvents<T>) {
     storage.select._events = {
       willSelect: ev.willSelect,
@@ -246,7 +254,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       didSelect: ev.didSelect,
       unSelect: ev.unSelect,
       reSelect: ev.reSelect,
-      firstLoad: ev.firstLoad,
+      // ลบ firstLoad ออก
       willLoad: ev.willLoad,
       loaded: ev.loaded,
       didLoaded: ev.didLoaded,
@@ -259,6 +267,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     };
   }
 
+  // --------------------------------------------------------------------------
+  // destroy() => ลบ event, คืนค่า state
+  // --------------------------------------------------------------------------
   function destroy() {
     const ref = storage.select.containerEl;
     if (!ref) return;
@@ -271,6 +282,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     storage.select.containerEl = undefined;
   }
 
+  // --------------------------------------------------------------------------
+  // ส่วน handleContainerClick(...) => จัดการคลิกเลือก item
+  // --------------------------------------------------------------------------
   function handleContainerClick(evt: MouseEvent) {
     const el = (evt.target as HTMLElement).closest('[role="option"]') as HTMLElement | null;
     if (!el) return;
@@ -278,6 +292,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       return;
     }
 
+    // -- สำหรับโหมด single-then-multi --
     if (type === 'single-then-multi') {
       if (evt.shiftKey) {
         doSelectRange(el);
@@ -316,6 +331,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       }
     }
 
+    // -- สำหรับโหมด multi --
     if (selectMode === 'multi') {
       if (evt.shiftKey) {
         doSelectRange(el);
@@ -342,6 +358,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       }
     }
 
+    // -- โหมด single หรืออื่น ๆ --
     callSelectEvent('willSelect', el);
     if (selectMode === 'single') {
       doSingleSelectLogic(el);
@@ -358,6 +375,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     storage.select.containerEl?.focus();
   }
 
+  // --------------------------------------------------------------------------
+  // callSelectEvent(...) และ callFocusEvent(...)
+  // --------------------------------------------------------------------------
   function callSelectEvent(
     name: 'willSelect' | 'select' | 'didSelect' | 'unSelect' | 'reSelect',
     el: HTMLElement
@@ -377,6 +397,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     }
   }
 
+  // --------------------------------------------------------------------------
+  // extractValueByPath(...) => ดึงค่าจาก object ตาม path
+  // --------------------------------------------------------------------------
   function extractValueByPath(obj: any, pathStr: string): any {
     const segments = pathStr.split('.');
     let current = obj;
@@ -397,6 +420,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     return current;
   }
 
+  // --------------------------------------------------------------------------
+  // findDataItem(...) => หา data item จาก id (ใช้ structure เทียบ)
+  // --------------------------------------------------------------------------
   function findDataItem(el: HTMLElement): T | null {
     const data = storage.select._selectData || [];
     const val = el.id.slice(id.length + 1);
@@ -420,20 +446,21 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     );
   }
 
+  // --------------------------------------------------------------------------
+  // buildInfo(...) => สร้างโครงสร้าง SelectCallbackInfo
+  // --------------------------------------------------------------------------
   function buildInfo(el: HTMLElement) {
     const selectedArray = storage.select.selectedItems
       .map((s) => s.dataItem)
       .filter(Boolean) as T[];
 
-    // keyValue: { [value: string]: T }
-    // ถ้าพบ key เดิมซ้ำกันหลายตัว เราจะเก็บตัวสุดท้ายไว้แทน
+    // สร้าง keyMap { [value:string]: T } จาก structure
     const keyMap: { [value: string]: T } = {};
     for (const item of selectedArray) {
       if (!structure) continue;
       const extracted = extractValueByPath(item, structure);
       const k = String(extracted);
-      // เก็บตัวสุดท้ายที่เจอ
-      keyMap[k] = item;
+      keyMap[k] = item; // เก็บตัวท้ายที่เจอ
     }
 
     return {
@@ -444,10 +471,13 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
         target: s.el,
       })),
       listValue: selectedArray,
-      keyValue: keyMap, // <-- ไม่เป็น array แล้ว
+      keyValue: keyMap,
     };
   }
 
+  // --------------------------------------------------------------------------
+  // getAllOptionElements, getIndexOf, isDisabled
+  // --------------------------------------------------------------------------
   function getAllOptionElements(): HTMLElement[] {
     const container = storage.select.containerEl;
     if (!container) return [];
@@ -463,6 +493,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     return el.getAttribute('aria-disabled') === 'true';
   }
 
+  // --------------------------------------------------------------------------
+  // doSingleSelectLogic(...) => สำหรับการเลือกแบบ single (clear ของเก่า)
+  // --------------------------------------------------------------------------
   function doSingleSelectLogic(el: HTMLElement) {
     storage.select.reselectAllowed = false;
     storage.select.unselectAllowed = false;
@@ -489,6 +522,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     callSelectEvent('didSelect', el);
   }
 
+  // --------------------------------------------------------------------------
+  // doToggleItemWithoutUnselectOthers(...)
+  // --------------------------------------------------------------------------
   function doToggleItemWithoutUnselectOthers(el: HTMLElement) {
     storage.select.reselectAllowed = false;
     storage.select.unselectAllowed = false;
@@ -511,6 +547,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     callSelectEvent('didSelect', el);
   }
 
+  // --------------------------------------------------------------------------
+  // doToggleItem(...)
+  // --------------------------------------------------------------------------
   function doToggleItem(el: HTMLElement) {
     storage.select.reselectAllowed = false;
     storage.select.unselectAllowed = false;
@@ -529,6 +568,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     callSelectEvent('didSelect', el);
   }
 
+  // --------------------------------------------------------------------------
+  // doSelectRange(...) => shift + click (multi select แบบ range)
+  // --------------------------------------------------------------------------
   function doSelectRange(el: HTMLElement) {
     const arr = storage.select.selectedItems;
     const all = getAllOptionElements();
@@ -562,6 +604,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     storage.select.lastIndexClicked = newIndex;
   }
 
+  // --------------------------------------------------------------------------
+  // selectByItem(...) => เลือก item จาก value string
+  // --------------------------------------------------------------------------
   function selectByItem(val: string) {
     const container = storage.select.containerEl;
     if (!container) {
@@ -592,6 +637,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     container.focus();
   }
 
+  // --------------------------------------------------------------------------
+  // unSelectByItem(...)
+  // --------------------------------------------------------------------------
   function unSelectByItem(val: string) {
     const container = storage.select.containerEl;
     if (!container) {
@@ -610,6 +658,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     }
   }
 
+  // --------------------------------------------------------------------------
+  // unSelectAll(...)
+  // --------------------------------------------------------------------------
   function unSelectAll() {
     const arr = storage.select.selectedItems;
     for (const it of [...arr]) {
@@ -619,10 +670,16 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     arr.length = 0;
   }
 
+  // --------------------------------------------------------------------------
+  // getValues() => คืนค่า data ที่ถูกเลือกทั้งหมด (array)
+  // --------------------------------------------------------------------------
   function getValues(): T[] {
     return storage.select.selectedItems.map((s) => s.dataItem).filter((x): x is T => !!x);
   }
 
+  // --------------------------------------------------------------------------
+  // updateAriaActiveDescendant(...) => ใส่/เคลียร์ aria-activedescendant
+  // --------------------------------------------------------------------------
   function updateAriaActiveDescendant() {
     const container = storage.select.containerEl;
     if (!container) return;
@@ -639,6 +696,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     }
   }
 
+  // --------------------------------------------------------------------------
+  // handleKeyDown(...) => จัดการ keyboard event
+  // --------------------------------------------------------------------------
   function handleKeyDown(evt: KeyboardEvent) {
     const container = storage.select.containerEl;
     if (!container) return;
@@ -679,6 +739,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     }
   }
 
+  // --------------------------------------------------------------------------
+  // moveFocus(direction: 1 | -1) => เลื่อน focus ขึ้น/ลง
+  // --------------------------------------------------------------------------
   function moveFocus(direction: 1 | -1) {
     const items = getAllOptionElements();
     if (!items.length) return;
@@ -709,6 +772,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     storage.select.lastIndexClicked = idx;
   }
 
+  // --------------------------------------------------------------------------
+  // moveFocusTo(index: number)
+  // --------------------------------------------------------------------------
   function moveFocusTo(index: number) {
     const items = getAllOptionElements();
     if (!items.length) return;
@@ -730,12 +796,18 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     storage.select.lastIndexClicked = index;
   }
 
+  // --------------------------------------------------------------------------
+  // moveFocusToLast()
+  // --------------------------------------------------------------------------
   function moveFocusToLast() {
     const items = getAllOptionElements();
     if (!items.length) return;
     moveFocusTo(items.length - 1);
   }
 
+  // --------------------------------------------------------------------------
+  // focusItem(val: string) => focus item ใด ๆ (ไม่ select)
+  // --------------------------------------------------------------------------
   function focusItem(val: string) {
     const container = storage.select.containerEl;
     if (!container) return;
@@ -754,16 +826,29 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     container.focus();
   }
 
+  // --------------------------------------------------------------------------
+  // doFirstLoad(...) => โหลดรอบแรก
+  // (ย้ายการเรียก callback มาเรียก onFirstLoad จาก containerParams)
+  // --------------------------------------------------------------------------
   function doFirstLoad(fullData: T[], loadCount?: number) {
     const count = loadCount || fullData.length;
     const newData = fullData.slice(0, count);
-    callLazyEvent('firstLoad', newData);
+
+    // เรียก callback ที่กำหนดใน containerParams (ถ้ามี)
+    const onFirstLoad = storage.select.containerParams?.init;
+    if (onFirstLoad) {
+      onFirstLoad(newData);
+    }
+
     if (storage.select.lazyState) {
       storage.select.lazyState.currentIndex = newData.length;
     }
     storage.select._currentLoadedData = newData;
   }
 
+  // --------------------------------------------------------------------------
+  // doLoadNextChunk(...) => load chunk ถัดไปเมื่อ scroll สุด
+  // --------------------------------------------------------------------------
   function doLoadNextChunk(fullData: T[], loadCount?: number) {
     if (!storage.select.lazyState) return;
     const start = storage.select.lazyState.currentIndex;
@@ -782,13 +867,19 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     storage.select._currentLoadedData = [...(storage.select._currentLoadedData || []), ...newData];
   }
 
-  function callLazyEvent(name: 'firstLoad' | 'willLoad' | 'loaded' | 'didLoaded', data: T[]) {
+  // --------------------------------------------------------------------------
+  // callLazyEvent(...) => เรียก event lazyLoad (จะไม่มี firstLoad แล้ว)
+  // --------------------------------------------------------------------------
+  function callLazyEvent(name: 'willLoad' | 'loaded' | 'didLoaded', data: T[]) {
     const cb = storage.select._events[name];
     if (cb) {
       cb(data);
     }
   }
 
+  // --------------------------------------------------------------------------
+  // callSearchEvent(...) => สำหรับ event ค้นหา (willSearch, searched, didSearched)
+  // --------------------------------------------------------------------------
   function callSearchEvent(name: 'willSearch' | 'searched' | 'didSearched', data: T[]) {
     const cb = storage.select._events[name];
     if (cb) {
@@ -796,10 +887,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     }
   }
 
-  /**
-   * แก้ไขตรงนี้ให้ search เฉพาะ _currentLoadedData
-   * เดิมเป็น fullData = storage.select._selectData || [];
-   */
+  // --------------------------------------------------------------------------
+  // searchItem(...) => ค้นหาจาก _currentLoadedData (แทน _selectData)
+  // --------------------------------------------------------------------------
   function searchItem(query: string, matchMode: 'substring' | 'startsWith') {
     const loadedData = storage.select._currentLoadedData || [];
     callSearchEvent('willSearch', loadedData);
@@ -822,6 +912,9 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     return filtered;
   }
 
+  // --------------------------------------------------------------------------
+  // Return ค่าออกเป็น object API
+  // --------------------------------------------------------------------------
   return {
     container,
     events,
