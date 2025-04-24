@@ -14,10 +14,6 @@ export function css<T extends Record<string, string[]>>(
   const scopeMatch = text.match(/@scope\s+([^\r\n]+)/);
   if (scopeMatch) {
     scopeName = scopeMatch[1].trim();
-    // ถ้าพบ "hash" => throw
-    if (scopeName === 'hash') {
-      throw new Error('[CSS-CTRL-ERR] "@scope hash" is no longer supported in runtime.');
-    }
   }
 
   // parse .className { ... } (แบบไม่ต้องสน nested braces)
@@ -47,16 +43,12 @@ export function css<T extends Record<string, string[]>>(
       if (!r.startsWith('.')) continue;
       const shortCls = r.slice(1);
 
-      // ถ้ามีอยู่แล้ว => ใช้เลย
       if (resultObj[shortCls]) {
+        // ถ้าพบ classKey ตรงกับที่ parse ไว้ใน resultObj
         finalList.push(resultObj[shortCls]);
       } else {
-        // ถ้าไม่มี => สร้างชื่อใหม่ตาม scope
-        if (scopeName === 'none') {
-          finalList.push(shortCls);
-        } else {
-          finalList.push(`${scopeName}_${shortCls}`);
-        }
+        // กรณีไม่พบ ให้คืนชื่อ class ดิบ ๆ (ไม่เติม scope)
+        finalList.push(shortCls);
       }
     }
     resultObj[bindKey] = finalList.join(' ');
