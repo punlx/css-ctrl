@@ -116,10 +116,7 @@ export function snackbar(options: SnackbarPluginOptions) {
   } = options;
 
   // ตั้งค่า duration ใน CSS variable
-  document.documentElement.style.setProperty(
-    '--snackbarPluginFadeDuration',
-    `${animationDuration}ms`
-  );
+
   validateOffset(position, offsetX, offsetY);
 
   /**
@@ -149,6 +146,8 @@ export function snackbar(options: SnackbarPluginOptions) {
       // กำหนดค่าเพื่อให้ child เป็น absolute
       document.body.appendChild(overlay);
     }
+    overlay?.style.setProperty('--snackbarPluginFadeDuration', `${animationDuration}ms`);
+
     storage.containerOverlayEl = overlay;
     return overlay;
   }

@@ -194,26 +194,17 @@ export function dialog(options: DialogPluginOptions) {
     // แล้วใช้ setAttribute('aria-labelledby', headingId) เพื่อ override
     dialogEl.setAttribute('aria-labelledby', `${id}-${heading}`);
 
-    document.documentElement.style.setProperty(`--${DIALOG_PLUGIN_OVERFLOW}`, `hidden`);
-    document.documentElement.style.setProperty(
-      `--${DIALOG_PLUGIN_FADE_DURATION}`,
-      `${fadeDuration}ms`
-    );
-    document.documentElement.style.setProperty(`--${DIALOG_PLUGIN_BACKDROP_COLOR}`, backdropColor);
-    document.documentElement.style.setProperty(
-      `--${DIALOG_PLUGIN_Fade_SCALE}`,
-      `scale(${fadeScale})`
-    );
+    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_OVERFLOW}`, `hidden`);
+    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_FADE_DURATION}`, `${fadeDuration}ms`);
+    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_BACKDROP_COLOR}`, backdropColor);
+    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_Fade_SCALE}`, `scale(${fadeScale})`);
 
-    document.documentElement.style.setProperty(
+    dialogEl.style.setProperty(
       `--${DIALOG_INTERNAL_PLUGIN_MAX_HEIGHT}`,
       `${getDialogInternalPLuginMaxHeight(scroll)}`
     );
 
-    document.documentElement.style.setProperty(
-      `--${DIALOG_PLUGIN_WIDTH}`,
-      `${getDialogPluginWidth(scroll)}`
-    );
+    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_WIDTH}`, `${getDialogPluginWidth(scroll)}`);
 
     document.body.appendChild(dialogEl);
 
@@ -223,6 +214,7 @@ export function dialog(options: DialogPluginOptions) {
 
     // เพิ่มการกำหนด tabIndex = -1 ให้ contentDiv เพื่อให้โฟกัสได้
     contentDiv.setAttribute('tabIndex', '-1');
+    contentDiv.classList.add('dialogPluginContainer');
 
     dialogEl.appendChild(contentDiv);
 

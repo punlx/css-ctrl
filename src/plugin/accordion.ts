@@ -61,7 +61,6 @@ export interface AccordionEvents {
   willEnable?: (info: AccordionEventInfo) => void;
   enable?: (info: AccordionEventInfo) => void;
   didEnable?: (info: AccordionEventInfo) => void;
-  /** ถ้าต้องการ event เดียวเมื่อมีการเปลี่ยนแปลงใด ๆ สามารถเพิ่มได้เช่น change?(info) {...} */
 }
 
 /** interface สำหรับ container(...) */
@@ -101,7 +100,7 @@ function animateHeight(params: {
 
   function step(timestamp: number) {
     if (animationState.isCancelled) {
-      return; // ถ้าโดน cancel ให้หยุดทันที
+      return;
     }
     if (startTime === null) {
       startTime = timestamp;
@@ -168,6 +167,42 @@ export function accordion(options: AccordionPluginOptions) {
   }
 
   // -------------------------------------------------------------
+  // Helper: อัปเดตคลาสใน heading ตาม state (expanded/collapsed/disabled/active)
+  // -------------------------------------------------------------
+  function updateClassesForItem(key: string) {
+    const containerEl = storage.accordion.containerEl;
+    if (!containerEl) return;
+    const headingEl = containerEl.querySelector<HTMLElement>(`[data-accordion-heading="${key}"]`);
+    if (!headingEl) return;
+    const isExpanded = headingEl.getAttribute('aria-expanded') === 'true';
+    const isDisabled = headingEl.getAttribute('aria-disabled') === 'true';
+    const isActive = document.activeElement === headingEl;
+
+    // expanded/collapsed
+    if (isExpanded) {
+      headingEl.classList.add('accordionPlugin-expanded');
+      headingEl.classList.remove('accordionPlugin-collapsed');
+    } else {
+      headingEl.classList.remove('accordionPlugin-expanded');
+      headingEl.classList.add('accordionPlugin-collapsed');
+    }
+
+    // disabled
+    if (isDisabled) {
+      headingEl.classList.add('accordionPlugin-disabled');
+    } else {
+      headingEl.classList.remove('accordionPlugin-disabled');
+    }
+
+    // active (focus)
+    if (isActive) {
+      headingEl.classList.add('accordionPlugin-active');
+    } else {
+      headingEl.classList.remove('accordionPlugin-active');
+    }
+  }
+
+  // -------------------------------------------------------------
   // Helper: update aria attributes ใน DOM (heading + panel)
   // -------------------------------------------------------------
   function setAriaForItem(key: string) {
@@ -191,6 +226,8 @@ export function accordion(options: AccordionPluginOptions) {
       panelEl.id = `${controls}-panel-${key}`;
       panelEl.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
     }
+    // เรียกอัปเดต class ท้ายสุด
+    updateClassesForItem(key);
   }
 
   // -------------------------------------------------------------
@@ -208,6 +245,12 @@ export function accordion(options: AccordionPluginOptions) {
       headingEl.removeAttribute('aria-expanded');
       headingEl.removeAttribute('aria-controls');
       headingEl.removeAttribute('id');
+      headingEl.classList.remove(
+        'accordionPlugin-expanded',
+        'accordionPlugin-collapsed',
+        'accordionPlugin-disabled',
+        'accordionPlugin-active'
+      );
     }
     if (panelEl) {
       panelEl.removeAttribute('role');
@@ -266,6 +309,9 @@ export function accordion(options: AccordionPluginOptions) {
     });
     containerEl.addEventListener('click', onClickHeading);
     containerEl.addEventListener('keydown', onKeydownHeading);
+    // เพิ่ม event focusin/focusout เพื่ออัปเดต .accordionPlugin-active
+    containerEl.addEventListener('focusin', onFocusInHeading);
+    containerEl.addEventListener('focusout', onFocusOutHeading);
   }
 
   // -------------------------------------------------------------
@@ -292,6 +338,32 @@ export function accordion(options: AccordionPluginOptions) {
       onClickHeading(evt as unknown as MouseEvent);
       evt.preventDefault();
     }
+  }
+
+  // -------------------------------------------------------------
+  // จัดการ focusin => เรียก updateClassesForItem
+  // -------------------------------------------------------------
+  function onFocusInHeading(evt: FocusEvent) {
+    const containerEl = storage.accordion.containerEl;
+    if (!containerEl) return;
+    const heading = (evt.target as HTMLElement).closest<HTMLElement>('[data-accordion-heading]');
+    if (!heading || !containerEl.contains(heading)) return;
+    const key = heading.getAttribute('data-accordion-heading');
+    if (!key) return;
+    updateClassesForItem(key);
+  }
+
+  // -------------------------------------------------------------
+  // จัดการ focusout => เรียก updateClassesForItem
+  // -------------------------------------------------------------
+  function onFocusOutHeading(evt: FocusEvent) {
+    const containerEl = storage.accordion.containerEl;
+    if (!containerEl) return;
+    const heading = (evt.target as HTMLElement).closest<HTMLElement>('[data-accordion-heading]');
+    if (!heading || !containerEl.contains(heading)) return;
+    const key = heading.getAttribute('data-accordion-heading');
+    if (!key) return;
+    updateClassesForItem(key);
   }
 
   // -------------------------------------------------------------
@@ -334,25 +406,17 @@ export function accordion(options: AccordionPluginOptions) {
       if (!containerEl) return;
       const panelEl = containerEl.querySelector<HTMLElement>(`[data-accordion-panel="${key}"]`);
       if (panelEl) {
-        // Cancel animation เดิมก่อน
         cancelAnimationIfExists(key);
-        // สร้าง AnimationState ใหม่
         const animState: AnimationState = { rafId: null, isCancelled: false };
         animations.set(key, animState);
-
         panelEl.removeAttribute('hidden');
         panelEl.style.overflow = 'hidden';
-
-        // หาก panelEl อาจมี height เดิม (กรณีเพิ่งถูกปิดไปไม่สุด) ให้วัดจาก style.height ปัจจุบัน
         let currentHeight = parseFloat(panelEl.style.height || '0');
         if (isNaN(currentHeight)) {
           currentHeight = 0;
         }
-
-        // เรียก open event
         const afterData = buildDataSnapshot();
         callEvent('open', { key, data: afterData });
-
         const targetHeight = panelEl.scrollHeight;
         animateHeight({
           el: panelEl,
@@ -394,13 +458,10 @@ export function accordion(options: AccordionPluginOptions) {
         cancelAnimationIfExists(key);
         const animState: AnimationState = { rafId: null, isCancelled: false };
         animations.set(key, animState);
-
         const currentHeight = panelEl.scrollHeight;
         panelEl.style.overflow = 'hidden';
-
         const afterData = buildDataSnapshot();
         callEvent('close', { key, data: afterData });
-
         animateHeight({
           el: panelEl,
           from: currentHeight,
@@ -521,7 +582,8 @@ export function accordion(options: AccordionPluginOptions) {
     if (containerEl) {
       containerEl.removeEventListener('click', onClickHeading);
       containerEl.removeEventListener('keydown', onKeydownHeading);
-      // เคลียร์ aria, hidden, style ของ items
+      containerEl.removeEventListener('focusin', onFocusInHeading);
+      containerEl.removeEventListener('focusout', onFocusOutHeading);
       storage.accordion.itemsMap.forEach((_, key) => {
         cleanupAriaForItem(key);
         const panelEl = containerEl.querySelector<HTMLElement>(`[data-accordion-panel="${key}"]`);
@@ -531,11 +593,9 @@ export function accordion(options: AccordionPluginOptions) {
           panelEl.style.overflow = '';
         }
       });
-      // เคลียร์ role, aria-label ของ container
       containerEl.removeAttribute('role');
       containerEl.removeAttribute('aria-label');
     }
-    // ยกเลิก animation ทั้งหมด
     animations.forEach((anim, key) => {
       if (anim.rafId !== null) {
         anim.isCancelled = true;
@@ -543,7 +603,6 @@ export function accordion(options: AccordionPluginOptions) {
       }
     });
     animations.clear();
-    // ล้าง map, set
     storage.accordion.itemsMap.clear();
     storage.accordion.openSet.clear();
     storage.accordion.disabledSet.clear();
@@ -551,7 +610,7 @@ export function accordion(options: AccordionPluginOptions) {
   }
 
   // -------------------------------------------------------------
-  // actions: addItem(...) / removeItem(...) (ตัวอย่าง)
+  // actions: addItem(...) / removeItem(...)
   // -------------------------------------------------------------
   function addItem(item: AccordionItem) {
     if (storage.accordion.itemsMap.has(item.key)) {
@@ -588,14 +647,10 @@ export function accordion(options: AccordionPluginOptions) {
       console.warn(`[accordion] removeItem failed: key "${key}" not found.`);
       return;
     }
-    // ปิดก่อนเพื่อให้ state อื่นเป็นปกติ
     close(key);
-    // ทำ cleanup aria
     cleanupAriaForItem(key);
-    // ยกเลิก animation ถ้ามี
     cancelAnimationIfExists(key);
     animations.delete(key);
-    // ลบออกจาก map / set
     storage.accordion.itemsMap.delete(key);
     storage.accordion.openSet.delete(key);
     storage.accordion.disabledSet.delete(key);

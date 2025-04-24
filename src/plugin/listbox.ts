@@ -190,6 +190,29 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
   };
 
   // --------------------------------------------------------------------------
+  // ฟังก์ชันช่วยอัปเดต class ของ option (selected/unselected/disabled)
+  // --------------------------------------------------------------------------
+  function updateOptionClasses(el: HTMLElement) {
+    // selected/unselected
+    const isSelected = el.getAttribute('aria-selected') === 'true';
+    if (isSelected) {
+      el.classList.add('listboxPlugin-selected');
+      el.classList.remove('listboxPlugin-unselected');
+    } else {
+      el.classList.remove('listboxPlugin-selected');
+      el.classList.add('listboxPlugin-unselected');
+    }
+
+    // disabled
+    const isDisabled = el.getAttribute('aria-disabled') === 'true';
+    if (isDisabled) {
+      el.classList.add('listboxPlugin-disabled');
+    } else {
+      el.classList.remove('listboxPlugin-disabled');
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // ฟังก์ชันช่วยเลื่อน scroll
   // --------------------------------------------------------------------------
   function scrollToItem(el: HTMLElement) {
@@ -254,7 +277,6 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       didSelect: ev.didSelect,
       unSelect: ev.unSelect,
       reSelect: ev.reSelect,
-      // ลบ firstLoad ออก
       willLoad: ev.willLoad,
       loaded: ev.loaded,
       didLoaded: ev.didLoaded,
@@ -510,6 +532,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     if (arr.length > 0) {
       for (const oldItem of [...arr]) {
         oldItem.el.setAttribute('aria-selected', 'false');
+        updateOptionClasses(oldItem.el);
         callSelectEvent('unSelect', oldItem.el);
       }
       arr.length = 0;
@@ -517,6 +540,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     }
 
     el.setAttribute('aria-selected', 'true');
+    updateOptionClasses(el);
     arr.push({ el, dataItem: findDataItem(el) });
     callSelectEvent('select', el);
     callSelectEvent('didSelect', el);
@@ -535,6 +559,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       callSelectEvent('reSelect', el);
       if (toggleable) {
         el.setAttribute('aria-selected', 'false');
+        updateOptionClasses(el);
         arr.splice(idx, 1);
         storage.select.unselectAllowed = true;
         callSelectEvent('unSelect', el);
@@ -542,6 +567,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       return;
     }
     el.setAttribute('aria-selected', 'true');
+    updateOptionClasses(el);
     arr.push({ el, dataItem: findDataItem(el) });
     callSelectEvent('select', el);
     callSelectEvent('didSelect', el);
@@ -557,12 +583,14 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     const idx = arr.findIndex((s) => s.el === el);
     if (idx >= 0) {
       el.setAttribute('aria-selected', 'false');
+      updateOptionClasses(el);
       arr.splice(idx, 1);
       storage.select.unselectAllowed = true;
       callSelectEvent('unSelect', el);
       return;
     }
     el.setAttribute('aria-selected', 'true');
+    updateOptionClasses(el);
     arr.push({ el, dataItem: findDataItem(el) });
     callSelectEvent('select', el);
     callSelectEvent('didSelect', el);
@@ -588,6 +616,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     let end = Math.max(oldIndex, newIndex);
     for (const oldItem of [...arr]) {
       oldItem.el.setAttribute('aria-selected', 'false');
+      updateOptionClasses(oldItem.el);
       callSelectEvent('unSelect', oldItem.el);
     }
     arr.length = 0;
@@ -596,6 +625,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
       if (!itemEl) continue;
       if (isDisabled(itemEl)) continue;
       itemEl.setAttribute('aria-selected', 'true');
+      updateOptionClasses(itemEl);
       arr.push({ el: itemEl, dataItem: findDataItem(itemEl) });
       callSelectEvent('select', itemEl);
       callSelectEvent('didSelect', itemEl);
@@ -653,6 +683,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     const idx = arr.findIndex((it) => it.el === el);
     if (idx >= 0) {
       el.setAttribute('aria-selected', 'false');
+      updateOptionClasses(el);
       arr.splice(idx, 1);
       callSelectEvent('unSelect', el);
     }
@@ -665,6 +696,7 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     const arr = storage.select.selectedItems;
     for (const it of [...arr]) {
       it.el.setAttribute('aria-selected', 'false');
+      updateOptionClasses(it.el);
       callSelectEvent('unSelect', it.el);
     }
     arr.length = 0;
@@ -685,12 +717,12 @@ export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>
     if (!container) return;
     const items = getAllOptionElements();
     items.forEach((it) => {
-      it.classList.remove('listboxPlugin-optionActive');
+      it.classList.remove('listboxPlugin-active');
     });
     const active = storage.select.activeItemEl;
     if (active) {
       container.setAttribute('aria-activedescendant', active.id);
-      active.classList.add('listboxPlugin-optionActive');
+      active.classList.add('listboxPlugin-active');
     } else {
       container.removeAttribute('aria-activedescendant');
     }
