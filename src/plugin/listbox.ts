@@ -147,7 +147,6 @@ interface SelectStorage<T> extends Record<string, unknown> {
 }
 
 /**
- * สุดท้าย: export function listbox(...)
  * เพิ่ม <T extends DataItem = DataItem> เพื่อให้เป็น Generic
  */
 export function listbox<T extends DataItem = DataItem>(options: SelectOptions<T>) {

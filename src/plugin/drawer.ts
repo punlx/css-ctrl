@@ -1,7 +1,7 @@
 // drawer.ts
 import { createRoot, Root } from 'react-dom/client';
 
-export interface DrawerEvents {
+interface DrawerEvents {
   willShow?: (info: { open: boolean }) => void;
   show?: (info: { open: boolean }) => void;
   didShow?: (info: { open: boolean }) => void;
@@ -10,7 +10,7 @@ export interface DrawerEvents {
   didClosed?: (info: { open: boolean }) => void;
 }
 
-export interface DrawerPluginAPI {
+interface DrawerPluginAPI {
   actions: {
     show(): void;
     close(): void;
@@ -68,7 +68,7 @@ interface DrawerStorage extends Record<string, unknown> {
 }
 
 /** ตัวเลือกในการสร้าง Drawer */
-export interface DrawerPluginOptions {
+interface DrawerPluginOptions {
   id: string;
   /** เนื้อหา React ที่จะ render เป็น Drawer (เช่น <DrawerContent/> ) */
   drawer: any;

@@ -2,7 +2,7 @@
 import { createRoot, Root } from 'react-dom/client';
 
 // ตำแหน่งต่าง ๆ
-export type SnackbarPosition =
+type SnackbarPosition =
   | 'top-left'
   | 'top-center'
   | 'top-right'
@@ -12,10 +12,10 @@ export type SnackbarPosition =
   | 'bottom-left'
   | 'left-center';
 
-export type SnackbarStackBehavior = 'stack' | 'replace';
+type SnackbarStackBehavior = 'stack' | 'replace';
 
 /** ประกาศ interface สำหรับ events โดยเพิ่ม target ที่เป็น Element */
-export interface SnackbarEvents {
+interface SnackbarEvents {
   /**
    * เรียกก่อนจะสร้าง DOM/render content ของ snackbar
    * ไม่ส่งค่าใดๆ กลับ
@@ -59,7 +59,7 @@ export interface SnackbarEvents {
   stackChanged?: (info: { itemIds: string[]; targets: HTMLElement[] }) => void;
 }
 
-export interface SnackbarPluginOptions {
+interface SnackbarPluginOptions {
   controls: string;
   type: 'status' | 'alert';
   heading?: string;

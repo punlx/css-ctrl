@@ -3,7 +3,7 @@
 // -------------------------------------------------------------
 
 /** ตัวเลือกหลักในการสร้าง Accordion Plugin */
-export interface AccordionPluginOptions {
+interface AccordionPluginOptions {
   /** ระบุว่า plugin นี้ชื่อ/controls อะไร (คล้าย id) ใช้สำหรับเชื่อมโยง aria-controls ฯลฯ */
   controls: string;
   /** เปิดหลาย panel พร้อมกันได้หรือไม่ (default=false = เปิดได้ทีละอัน) */
@@ -20,7 +20,7 @@ export interface AccordionPluginOptions {
 }
 
 /** ข้อมูลของแต่ละ item ใน accordion */
-export interface AccordionItem {
+interface AccordionItem {
   /** key ของ item (unique ภายใน accordion) */
   key: string;
   /** ค่าเริ่มต้นว่าเปิดหรือไม่ */
@@ -35,7 +35,7 @@ export interface AccordionItem {
 }
 
 /** โครงสร้างข้อมูลที่ส่งไปใน event ต่าง ๆ ของ Accordion */
-export interface AccordionEventInfo {
+interface AccordionEventInfo {
   /** key ของ item ที่เกิดเหตุ เช่น 'panel1' */
   key: string;
   /** data = snapshot items ปัจจุบันทั้งหมด หลังปรับแล้ว */
@@ -48,7 +48,7 @@ export interface AccordionEventInfo {
 }
 
 /** กำหนด callback events สำหรับ lifecycle การ open/close/disable/enable */
-export interface AccordionEvents {
+interface AccordionEvents {
   willOpen?: (info: AccordionEventInfo) => void;
   open?: (info: AccordionEventInfo) => void;
   didOpen?: (info: AccordionEventInfo) => void;
