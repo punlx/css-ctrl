@@ -13,14 +13,11 @@
     "dist"
   ],
   "scripts": {
-    "build:plugin": "tsc -p tsconfig.plugin.json",
-    "build:css": "node scripts/build-css.js",
     "build:client": "tsc -p tsconfig.client.json",
     "build:esbuild": "node esbuild.config.js",
-    "move:plugin": "node scripts/move-plugin.js",
-    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/*.d.ts\" \"!dist/client/index.d.ts\" \"!dist/client/css.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/types.d.ts\" \"dist/plugin/**\" \"!dist/plugin/types.d.ts\"",
+    "clean:nonmin": "del-cli \"dist/client/**\" \"!dist/client/*.d.ts\" \"!dist/client/index.d.ts\" \"!dist/client/css.d.ts\" \"!dist/client/theme.d.ts\" \"!dist/client/types.d.ts\"",
     "generate:dts": "node scripts/generate-dts.js",
-    "build": "rm -rf dist && npm run build:plugin && npm run build:client && npm run build:esbuild && npm run move:plugin && npm run clean:nonmin && npm run build:css && npm run generate:dts"
+    "build": "rm -rf dist && npm run build:client && npm run build:esbuild && npm run clean:nonmin && npm run generate:dts"
   },
   "devDependencies": {
     "@types/react-dom": "^19.1.2",
