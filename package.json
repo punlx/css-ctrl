@@ -7,36 +7,7 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./listbox": {
-      "import": "./dist/listbox.js",
-      "types": "./dist/listbox.d.ts"
-    },
-    "./dialog": {
-      "import": "./dist/dialog.js",
-      "types": "./dist/dialog.d.ts"
-    },
-    "./popover": {
-      "import": "./dist/popover.js",
-      "types": "./dist/popover.d.ts"
-    },
-    "./snackbar": {
-      "import": "./dist/snackbar.js",
-      "types": "./dist/snackbar.d.ts"
-    },
-    "./drawer": {
-      "import": "./dist/drawer.js",
-      "types": "./dist/drawer.d.ts"
-    },
-    "./accordion": {
-      "import": "./dist/accordion.js",
-      "types": "./dist/accordion.d.ts"
-    },
-    "./tabs": {
-      "import": "./dist/tabs.js",
-      "types": "./dist/tabs.d.ts"
-    },
-    "./plugin.css": "./dist/plugin.css"
+    }
   },
   "files": [
     "dist"
