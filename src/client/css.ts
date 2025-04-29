@@ -4,6 +4,13 @@ import { attachGetMethod } from './parser/attachGetMethod';
 import { parseClassBlocksWithBraceCounting } from './parser/parseClassBlocksWithBraceCounting';
 import { CSSResult } from './types';
 
+/**
+ * css<T>():
+ *  - parse @scope <name>
+ *  - parse .className { ... } (โดยไม่สน nested braces)
+ *  - parse @bind ภายในแต่ละ block
+ *  - สุดท้าย attachGetMethod => มี .get(...).set(...).reset() ฯลฯ
+ */
 export function css<T extends Record<string, string[]>>(
   template: TemplateStringsArray
 ): CSSResult<T> {
@@ -16,45 +23,66 @@ export function css<T extends Record<string, string[]>>(
     scopeName = scopeMatch[1].trim();
   }
 
-  // parse .className { ... } (แบบไม่ต้องสน nested braces)
+  // (CHANGED) สร้างฟังก์ชัน getScopedName สำหรับเติม scope
+  function getScopedName(cls: string) {
+    return scopeName === 'none' ? cls : `${scopeName}_${cls}`;
+  }
+
+  // parse .className { ... }
   const blocks = parseClassBlocksWithBraceCounting(text);
+
+  // สร้าง resultObj: { [className]: string }
   const resultObj: Record<string, string> = {};
 
+  // 1) ใส่ค่าเริ่มต้น (local class => scopeName_className) ใช้ getScopedName
   for (const b of blocks) {
     const className = b.className;
-    // bodyInside = b.body (เรายังดึงมาได้ แต่ที่นี่ไม่ใช้งานแล้ว)
-    if (scopeName === 'none') {
-      resultObj[className] = className;
-    } else {
-      resultObj[className] = `${scopeName}_${className}`;
-    }
+    resultObj[className] = getScopedName(className); // (CHANGED)
   }
 
-  // parse @bind
-  const bindRegex = /@bind\s+([\w-]+)\s+([^\r\n]+)/g;
-  let bindMatch: RegExpExecArray | null;
-  while ((bindMatch = bindRegex.exec(text)) !== null) {
-    const bindKey = bindMatch[1];
-    const refsLine = bindMatch[2].trim();
-    const refs = refsLine.split(/\s+/).filter(Boolean);
+  // 2) parse @bind ภายในแต่ละ block
+  for (const b of blocks) {
+    const className = b.className;
+    // เตรียมเก็บเป็น Set ไว้ป้องกัน duplication
+    const originalVal = resultObj[className] || '';
+    const classSet = new Set<string>(originalVal.split(/\s+/).filter(Boolean));
 
-    const finalList: string[] = [];
-    for (const r of refs) {
-      if (!r.startsWith('.')) continue;
-      const shortCls = r.slice(1);
+    // แยกบรรทัดใน body
+    const lines = b.body
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    for (const line of lines) {
+      if (!line.startsWith('@bind ')) {
+        continue;
+      }
+      // line เช่น "@bind .card .card2"
+      const bindRefs = line.replace('@bind', '').trim();
+      if (!bindRefs) {
+        continue;
+      }
+      const refs = bindRefs.split(/\s+/).filter(Boolean);
+      for (const r of refs) {
+        if (!r.startsWith('.')) {
+          // สมมติข้ามหรืออาจ throw error
+          continue;
+        }
+        const shortCls = r.slice(1);
 
-      if (resultObj[shortCls]) {
-        // ถ้าพบ classKey ตรงกับที่ parse ไว้ใน resultObj
-        finalList.push(resultObj[shortCls]);
-      } else {
-        // กรณีไม่พบ ให้คืนชื่อ class ดิบ ๆ (ไม่เติม scope)
-        finalList.push(shortCls);
+        // ถ้าพบใน resultObj => ใช้ scoped, ไม่งั้นชื่อดิบ
+        if (resultObj[shortCls]) {
+          classSet.add(resultObj[shortCls]);
+        } else {
+          classSet.add(shortCls);
+        }
       }
     }
-    resultObj[bindKey] = finalList.join(' ');
+
+    // join กลับเก็บใน resultObj[className]
+    resultObj[className] = Array.from(classSet).join(' ');
   }
 
-  // attach .get(...).set(...)
+  // attach .get(...).set(...) ให้
   attachGetMethod(resultObj as CSSResult<T>);
   return resultObj as CSSResult<T>;
 }
