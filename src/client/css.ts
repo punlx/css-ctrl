@@ -23,7 +23,6 @@ export function css<T extends Record<string, string[]>>(
     scopeName = scopeMatch[1].trim();
   }
 
-  // (CHANGED) สร้างฟังก์ชัน getScopedName สำหรับเติม scope
   function getScopedName(cls: string) {
     return scopeName === 'none' ? cls : `${scopeName}_${cls}`;
   }
@@ -34,24 +33,20 @@ export function css<T extends Record<string, string[]>>(
   // สร้าง resultObj: { [className]: string }
   const resultObj: Record<string, string> = {};
 
-  // 1) ใส่ค่าเริ่มต้น (local class => scopeName_className) ใช้ getScopedName
+  // 1) ใส่ค่าเริ่มต้น (local class => scopeName_className)
   for (const b of blocks) {
     const className = b.className;
-    resultObj[className] = getScopedName(className); // (CHANGED)
+    resultObj[className] = getScopedName(className);
   }
 
   // 2) parse @bind ภายในแต่ละ block
   for (const b of blocks) {
     const className = b.className;
-    // เตรียมเก็บเป็น Set ไว้ป้องกัน duplication
     const originalVal = resultObj[className] || '';
     const classSet = new Set<string>(originalVal.split(/\s+/).filter(Boolean));
 
     // แยกบรรทัดใน body
-    const lines = b.body
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
+    const lines = b.body.split('\n').map((l) => l.trim()).filter(Boolean);
     for (const line of lines) {
       if (!line.startsWith('@bind ')) {
         continue;
@@ -64,25 +59,25 @@ export function css<T extends Record<string, string[]>>(
       const refs = bindRefs.split(/\s+/).filter(Boolean);
       for (const r of refs) {
         if (!r.startsWith('.')) {
-          // สมมติข้ามหรืออาจ throw error
-          continue;
+          continue; // หรือ throw error ตามต้องการ
         }
         const shortCls = r.slice(1);
 
-        // ถ้าพบใน resultObj => ใช้ scoped, ไม่งั้นชื่อดิบ
+        // (CHANGED) Split resultObj[shortCls] เป็นแต่ละ token
         if (resultObj[shortCls]) {
-          classSet.add(resultObj[shortCls]);
+          const tokens = resultObj[shortCls].split(/\s+/);
+          for (const t of tokens) {
+            classSet.add(t);
+          }
         } else {
           classSet.add(shortCls);
         }
       }
     }
 
-    // join กลับเก็บใน resultObj[className]
     resultObj[className] = Array.from(classSet).join(' ');
   }
 
-  // attach .get(...).set(...) ให้
   attachGetMethod(resultObj as CSSResult<T>);
   return resultObj as CSSResult<T>;
 }
