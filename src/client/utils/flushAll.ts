@@ -19,6 +19,12 @@ type FinalAction =
 export const pendingGlobalFinal: Record<string, FinalAction> = {};
 
 /**
+ * สำหรับให้ Promise.resolve หลังจาก flushAll() ทำงานเสร็จ (ใน rAF)
+ */
+let flushPromise: Promise<void> | null = null;
+let flushResolve: (() => void) | null = null;
+
+/**
  * flushAll(): ทำงานใน requestAnimationFrame รอบถัดไป
  * วิ่ง set/removeProperty ตาม pendingGlobalFinal แล้วเคลียร์
  */
@@ -38,6 +44,13 @@ export function flushAll() {
   }
 
   rafScheduled = false;
+
+  // ถ้ามีคนรอให้ flush เสร็จ ก็ resolve promise ตรงนี้
+  if (flushResolve) {
+    flushResolve();
+    flushResolve = null;
+    flushPromise = null;
+  }
 }
 
 /**
@@ -66,4 +79,23 @@ export function pushSetAction(varName: string, value: string) {
 export function pushRemoveAction(varName: string) {
   pendingGlobalFinal[varName] = { type: 'remove' };
   scheduleFlush();
+}
+
+/**
+ * รอให้ flushAll() ทำงานเสร็จ
+ * ถ้ายังไม่มีการ schedule flush ก็ resolve ทันที
+ * ถ้ามีการ schedule flush อยู่แล้ว ก็ผูก promise เพื่อ resolve หลัง flushAll() จบ
+ */
+export function waitForNextFlush(): Promise<void> {
+  if (!rafScheduled) {
+    // ไม่ได้มี flush ที่กำลังรอ => resolve ทันที
+    return Promise.resolve();
+  }
+
+  if (!flushPromise) {
+    flushPromise = new Promise<void>((resolve) => {
+      flushResolve = resolve;
+    });
+  }
+  return flushPromise;
 }
