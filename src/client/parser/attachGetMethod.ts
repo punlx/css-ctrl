@@ -1,16 +1,10 @@
 // src/client/parser/attachGetMethod.ts
 
-import {
-  CSSResult,
-  PropsForGlobalClass,
-} from '../types';
+import { CSSResult, PropsForGlobalClass } from '../types';
 import { buildVariableName } from '../utils/buildVariableName';
 import { parseDisplayName } from '../utils/parseDisplayName';
 import { parseVariableAbbr } from '../utils/parseVariableAbbr';
-import {
-  pushSetAction,
-  pushRemoveAction,
-} from '../utils/flushAll';
+import { pushSetAction, pushRemoveAction, waitForNextFlush } from '../utils/flushAll';
 
 /**
  * attachGetMethod: เพิ่ม .get(...).set(...).reset(...) และ .reset() (ล้างทั้งหมดของ scope)
@@ -24,15 +18,23 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
 
   /**
    * สำหรับ type overload ของ .get(...)
+   * - .set(props)
+   * - .reset(keys?)  (optional keys เหมือน code เก่า)
+   * - .value(keys)   (ต้องส่ง keys เสมอ)
    */
-  function get<K2 extends keyof T>(classKey: K2): {
+  function get<K2 extends keyof T>(
+    classKey: K2
+  ): {
     set: (props: PropsForGlobalClass<T[K2]>) => void;
     reset: (keys?: Array<T[K2][number]>) => void;
+    value: (
+      keys: Array<T[K2][number]>
+    ) => Promise<Record<T[K2][number], { prop: string; value: string }>>;
   };
 
   /**
    * ฟังก์ชันหลักรับเป็น string (classKey)
-   * ถ้าไม่มี classKey ใน resultObj => return no-op
+   * ถ้าไม่มี classKey ใน resultObj => return no-op (ตาม code เก่า)
    */
   function get(arg1: string) {
     if (typeof arg1 === 'string') {
@@ -41,6 +43,7 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
         return {
           set: () => {},
           reset: () => {},
+          value: async () => ({}),
         };
       }
 
@@ -84,6 +87,7 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
         /**
          * reset(keys?) => removeProperty เฉพาะที่เคย set ไว้
          * ถ้าไม่ส่ง keys => removeProperty ทั้งหมดของ classKey
+         * (ยังคงเหมือน code เก่า)
          */
         reset(keys?: Array<T[keyof T][number]>) {
           if (scope === 'none') {
@@ -113,11 +117,44 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             }
           }
         },
+
+        /**
+         * value(keys): Promise => รอให้ flushAll() ทำงานเสร็จ
+         * แล้วค่อยอ่านค่าจริงจาก DOM (inline + fallback computed)
+         * (บังคับต้องส่ง array of keys)
+         */
+        async value(keys: Array<T[keyof T][number]>) {
+          if (scope === 'none') {
+            return {};
+          }
+
+          // รอรอบ rAF ถัดไป ถ้ามีการ set/reset ที่ยัง pending
+          await waitForNextFlush();
+
+          const result: Record<T[keyof T][number], { prop: string; value: string }> = {} as any;
+
+          for (const abbr of keys) {
+            const { baseVarName, suffix } = parseVariableAbbr(abbr);
+            const finalVarName = buildVariableName(baseVarName, scope, cls, suffix);
+
+            // อ่านจาก inline style ก่อน ถ้าไม่มีจึง fallback getComputedStyle
+            const computedVal =
+              document.documentElement.style.getPropertyValue(finalVarName) ||
+              getComputedStyle(document.documentElement).getPropertyValue(finalVarName);
+
+            result[abbr] = {
+              prop: finalVarName,
+              value: computedVal,
+            };
+          }
+
+          return result;
+        },
       };
     }
 
     // fallback no-op
-    return { set: () => {}, reset: () => {} };
+    return { set: () => {}, reset: () => {}, value: async () => ({}) };
   }
 
   /**
