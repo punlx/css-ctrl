@@ -1,105 +1,29 @@
-// src/client/theme.ts
-
-const keyframeRuntimeDict: Record<string, Record<string, { set: (props: any) => void }>> = {};
-
-function parseKeyframeAbbr(
-  abbrBody: string,
-  keyframeName: string,
-  blockLabel: string
-): {
-  cssText: string;
-  varMap: Record<string, string>;
-  defaultVars: Record<string, string>;
-} {
-  const regex = /([\w\-\$]+)\[(.*?)\]/g;
-  let match: RegExpExecArray | null;
-
-  let cssText = '';
-  const varMap: Record<string, string> = {};
-  const defaultVars: Record<string, string> = {};
-
-  while ((match = regex.exec(abbrBody)) !== null) {
-    let styleAbbr = match[1];
-    let propVal = match[2];
-
-    if (propVal.includes('--')) {
-      propVal = propVal.replace(/(--[\w-]+)/g, 'var($1)');
-    }
-
-    let isVar = false;
-    if (styleAbbr.startsWith('$')) {
-      isVar = true;
-      styleAbbr = styleAbbr.slice(1);
-    }
-
-    if (isVar) {
-      const finalVarName = `--${styleAbbr}-${keyframeName}-${blockLabel.replace('%', '')}`;
-      cssText += `${styleAbbr}:var(${finalVarName});`;
-      varMap[styleAbbr] = finalVarName;
-      defaultVars[finalVarName] = propVal;
-    } else {
-      cssText += `${styleAbbr}:${propVal};`;
-    }
-  }
-
-  return { cssText, varMap, defaultVars };
-}
-
-function parseKeyframeString(keyframeName: string, rawStr: string) {
-  const regex = /(\b(?:\d+%|from|to))\(([^)]*)\)/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(rawStr)) !== null) {
-    const label = match[1];
-    const abbrBody = match[2];
-
-    const { cssText, varMap, defaultVars } = parseKeyframeAbbr(
-      abbrBody.trim(),
-      keyframeName,
-      label
-    );
-
-    if (!keyframeRuntimeDict[keyframeName]) {
-      keyframeRuntimeDict[keyframeName] = {};
-    }
-    if (!keyframeRuntimeDict[keyframeName][label]) {
-      keyframeRuntimeDict[keyframeName][label] = {
-        set: (props: Record<string, string>) => {
-          for (const k in props) {
-            if (!k.startsWith('$')) {
-              console.error(`Only $var is allowed. got key="${k}"`);
-              continue;
-            }
-            const shortAbbr = k.slice(1);
-            const finalVarName = varMap[shortAbbr];
-            if (!finalVarName) {
-              console.warn(`No var for ${k} in block "${label}" of keyframe "${keyframeName}"`);
-              continue;
-            }
-            document.documentElement.style.setProperty(finalVarName, props[k]);
-          }
-        },
-      };
-    }
-  }
-}
-
+/**
+ * เปลี่ยน theme (ในระดับ root <html>) โดยลบ class เก่าออกแล้วใส่ class ใหม่
+ */
 function setTheme(mode: string, modes: string[]) {
   if (typeof window !== 'undefined') {
     document.documentElement.classList.remove(...modes);
     document.documentElement.classList.add(mode);
     try {
       localStorage.setItem('css-ctrl-theme', mode);
-    } catch {}
+    } catch {
+      // do nothing
+    }
   }
 }
 
+/**
+ * สำหรับเรียกครั้งแรกตอน client mount (หรือ SSR) เพื่ออ่านค่าจาก localStorage ถ้ามี
+ */
 const initialTheme = (modes: string[]) => {
   let saved = '';
   let currentMode = '';
   try {
     saved = localStorage.getItem('css-ctrl-theme') || modes[0];
-  } catch {}
+  } catch {
+    // do nothing
+  }
 
   if (saved && modes.indexOf(saved) !== -1) {
     setTheme(saved, modes);
@@ -116,15 +40,18 @@ export const theme = {
   palette(colors: string[][]) {
     const modes = colors[0];
     const initialMode = modes[0];
-    // for CSR
-    if (window !== undefined) {
+    // สำหรับ client side
+    if (typeof window !== 'undefined') {
       initialTheme(modes);
     }
     return {
-      swtich: (mode: string) => setTheme(mode, modes),
+      switch: (mode: string) => setTheme(mode, modes),
       modes,
-      getCurrentMode: () => localStorage?.getItem('css-ctrl-theme') || initialMode,
-      // for SSR
+      getCurrentMode: () => {
+        if (typeof window === 'undefined') return initialMode;
+        return localStorage?.getItem('css-ctrl-theme') || initialMode;
+      },
+      // สำหรับ SSR
       init: () => initialTheme(modes),
     };
   },
@@ -133,22 +60,11 @@ export const theme = {
 
   typography(typoMap: Record<string, string>) {},
 
-  keyframe(keyframeMap: Record<string, string>) {
-    const resultObj: Record<string, Record<string, { set: (props: any) => void }>> = {};
-    for (const keyName in keyframeMap) {
-      const rawStr = keyframeMap[keyName];
-      parseKeyframeString(keyName, rawStr);
-
-      if (!keyframeRuntimeDict[keyName]) {
-        keyframeRuntimeDict[keyName] = {};
-      }
-      resultObj[keyName] = keyframeRuntimeDict[keyName];
-    }
-    return resultObj;
-  },
+  keyframe(keyframeMap: Record<string, string>) {},
 
   variable(variableMap: Record<string, string>) {},
 
-  define(styleMap: Record<string, Record<string, string>>) {},
+  property(styleMap: Record<string, Record<string, string>>) {},
+
   class(classMap: Record<string, string>) {},
 };
