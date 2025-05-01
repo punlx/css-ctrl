@@ -1,5 +1,6 @@
 /**
- * เปลี่ยน theme (ในระดับ root <html>) โดยลบ class เก่าออกแล้วใส่ class ใหม่
+ * Removes previous themes and applies the specified theme at the <html> level.
+ * Also saves the current theme in localStorage if available.
  */
 function setTheme(mode: string, modes: string[]) {
   if (typeof window !== 'undefined') {
@@ -8,13 +9,14 @@ function setTheme(mode: string, modes: string[]) {
     try {
       localStorage.setItem('css-ctrl-theme', mode);
     } catch {
-      // do nothing
+      // Do nothing if localStorage is inaccessible
     }
   }
 }
 
 /**
- * สำหรับเรียกครั้งแรกตอน client mount (หรือ SSR) เพื่ออ่านค่าจาก localStorage ถ้ามี
+ * Initializes the theme by reading from localStorage (if available)
+ * or defaults to the first item in the modes array.
  */
 const initialTheme = (modes: string[]) => {
   let saved = '';
@@ -22,7 +24,7 @@ const initialTheme = (modes: string[]) => {
   try {
     saved = localStorage.getItem('css-ctrl-theme') || modes[0];
   } catch {
-    // do nothing
+    // Fallback to the default mode if localStorage is not accessible
   }
 
   if (saved && modes.indexOf(saved) !== -1) {
@@ -36,11 +38,16 @@ const initialTheme = (modes: string[]) => {
   return currentMode;
 };
 
+/**
+ * Exports a 'theme' object providing methods to switch among themes,
+ * manage breakpoints, typography, keyframes, etc.
+ * Only the 'palette()' method is demonstrated here. Other methods are placeholders.
+ */
 export const theme = {
   palette(colors: string[][]) {
     const modes = colors[0];
     const initialMode = modes[0];
-    // สำหรับ client side
+    // Initialize the theme on the client side
     if (typeof window !== 'undefined') {
       initialTheme(modes);
     }
@@ -51,11 +58,12 @@ export const theme = {
         if (typeof window === 'undefined') return initialMode;
         return localStorage?.getItem('css-ctrl-theme') || initialMode;
       },
-      // สำหรับ SSR
+      // For SSR
       init: () => initialTheme(modes),
     };
   },
 
+  // Used for css-ctrl compiler.
   breakpoint(breakpointList: Record<string, string>) {},
 
   typography(typoMap: Record<string, string>) {},

@@ -3,30 +3,31 @@
 let rafScheduled = false;
 
 /**
- * FinalAction เก็บสถานะสุดท้ายของ varName นั้น ๆ ใน 1 เฟรม
- * - type = 'set' => setProperty(varName, value)
- * - type = 'remove' => removeProperty(varName)
+ * Represents the final action to apply to a particular CSS custom property in a single frame.
+ * If multiple actions for the same property occur within one frame,
+ * only the last action is recorded.
  */
 type FinalAction =
   | { type: 'set'; value: string }
   | { type: 'remove' };
 
 /**
- * pendingGlobalFinal: Map เก็บ varName -> FinalAction
- * หากใน 1 เฟรมมีการ set/remove ซ้ำ ๆ varName เดียวกัน
- * เราจะ "เขียนทับ" (override) เหลือแค่สถานะสุดท้าย
+ * A record storing the latest intended action for each variable name in the current frame.
+ * This ensures that repeated set/remove actions override previous actions
+ * for the same variable within one animation frame.
  */
 export const pendingGlobalFinal: Record<string, FinalAction> = {};
 
 /**
- * สำหรับให้ Promise.resolve หลังจาก flushAll() ทำงานเสร็จ (ใน rAF)
+ * Used to coordinate a promise that resolves after flushAll() is executed in a rAF callback.
  */
 let flushPromise: Promise<void> | null = null;
 let flushResolve: (() => void) | null = null;
 
 /**
- * flushAll(): ทำงานใน requestAnimationFrame รอบถัดไป
- * วิ่ง set/removeProperty ตาม pendingGlobalFinal แล้วเคลียร์
+ * flushAll() applies all pending set/remove actions to the documentElement's style
+ * and clears the pending actions. It is intended to run inside a requestAnimationFrame
+ * callback. After applying actions, it also resolves any pending promise from waitForNextFlush().
  */
 export function flushAll() {
   const varNames = Object.keys(pendingGlobalFinal);
@@ -38,14 +39,15 @@ export function flushAll() {
       document.documentElement.style.removeProperty(varName);
     }
   }
-  // เคลียร์ map
+
+  // Clear pending actions
   for (const v of varNames) {
     delete pendingGlobalFinal[v];
   }
 
   rafScheduled = false;
 
-  // ถ้ามีคนรอให้ flush เสร็จ ก็ resolve promise ตรงนี้
+  // Resolve the waiting promise if it exists
   if (flushResolve) {
     flushResolve();
     flushResolve = null;
@@ -54,7 +56,8 @@ export function flushAll() {
 }
 
 /**
- * scheduleFlush(): ขอให้ flushAll() ทำงานภายใน rAF แค่ 1 ครั้งต่อเฟรม
+ * scheduleFlush() ensures flushAll() is executed in the next requestAnimationFrame call.
+ * It sets a flag to avoid scheduling multiple callbacks in the same frame.
  */
 export function scheduleFlush() {
   if (!rafScheduled) {
@@ -64,8 +67,8 @@ export function scheduleFlush() {
 }
 
 /**
- * pushSetAction(): ตั้งค่า "สถานะสุดท้าย" ของ varName = { type: 'set', value }
- * ถ้ามี action เดิมจะถูกทับ
+ * pushSetAction() records that a CSS custom property should be set to the given value.
+ * If there's already an action for the same variable, it will be overridden.
  */
 export function pushSetAction(varName: string, value: string) {
   pendingGlobalFinal[varName] = { type: 'set', value };
@@ -73,8 +76,8 @@ export function pushSetAction(varName: string, value: string) {
 }
 
 /**
- * pushRemoveAction(): ตั้งค่า "สถานะสุดท้าย" ของ varName = { type: 'remove' }
- * ถ้ามี action เดิมจะถูกทับ
+ * pushRemoveAction() records that a CSS custom property should be removed.
+ * If there's already an action for the same variable, it will be overridden.
  */
 export function pushRemoveAction(varName: string) {
   pendingGlobalFinal[varName] = { type: 'remove' };
@@ -82,13 +85,11 @@ export function pushRemoveAction(varName: string) {
 }
 
 /**
- * รอให้ flushAll() ทำงานเสร็จ
- * ถ้ายังไม่มีการ schedule flush ก็ resolve ทันที
- * ถ้ามีการ schedule flush อยู่แล้ว ก็ผูก promise เพื่อ resolve หลัง flushAll() จบ
+ * waitForNextFlush() returns a promise that resolves once the flushAll() has completed.
+ * If there is no pending flush, it resolves immediately.
  */
 export function waitForNextFlush(): Promise<void> {
   if (!rafScheduled) {
-    // ไม่ได้มี flush ที่กำลังรอ => resolve ทันที
     return Promise.resolve();
   }
 

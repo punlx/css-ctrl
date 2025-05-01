@@ -1,17 +1,19 @@
-/************************************************************
- * 1) ชนิดข้อมูล Utility สำหรับเมธอด .set(...)
- ************************************************************/
+// src/client/types.ts
 
-/** แปลง T[K] (string[]) => { varKey?: string } */
+/**
+ * Converts an array of string-based property keys to an object whose keys
+ * are those properties, and values are string. All properties are optional.
+ */
 export type PropsForGlobalClass<ClassArr extends string[]> = Partial<
   Record<ClassArr[number], string>
 >;
 
 /**
- * CSSResult<T>:
- *  - แต่ละ key (K) => string (เป็น className)
- *  - มี .get(K) => { set, reset, value }
- *  - มี .reset() => resetAll
+ * CSSResult<T> is the return type of the `css<T>()` function.
+ * For each key in T, there is a corresponding string value (the final class name).
+ * Additionally, the result object has:
+ *   - .get(K): an object with .set(), .reset(), .value()
+ *   - .reset(): a function that resets *all* tracked custom properties globally
  */
 export type CSSResult<T extends Record<string, string[]>> = {
   [K in keyof T]: string;
@@ -19,27 +21,11 @@ export type CSSResult<T extends Record<string, string[]>> = {
   get<K2 extends keyof T>(
     classKey: K2
   ): {
-    /**
-     * .set({...}) => รับเป็น PropsForGlobalClass<T[K2]>
-     */
     set: (props: PropsForGlobalClass<T[K2]>) => void;
-
-    /**
-     * .reset(keys) => ต้องส่ง array ของ T[K2][number] เสมอ
-     */
     reset: (keys: Array<T[K2][number]>) => void;
-
-    /**
-     * .value(keys) => ต้องส่ง array ของ T[K2][number] เสมอ
-     * คืน Promise ของ Record<key, { prop, value }>
-     */
     value: (
       keys: Array<T[K2][number]>
     ) => Promise<Record<T[K2][number], { prop: string; value: string }>>;
   };
-
-  /**
-   * .reset() => Reset global ทั้งหมด
-   */
   reset(): void;
 };
