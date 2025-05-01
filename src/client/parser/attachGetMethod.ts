@@ -7,20 +7,21 @@ import { parseVariableAbbr } from '../utils/parseVariableAbbr';
 import { pushSetAction, pushRemoveAction, waitForNextFlush } from '../utils/flushAll';
 
 /**
- * attachGetMethod: เพิ่ม .get(...).set(...).reset(...) และ .reset() (ล้างทั้งหมดของ scope)
+ * Attaches `.get(...)` to the provided `CSSResult<T>` object.
+ * This method enables chaining of `.set(...)`, `.reset(...)`, and `.value(...)` actions
+ * on the registered classes. It also attaches a `.reset()` method that resets all
+ * associated variables globally.
  */
 export function attachGetMethod<T extends Record<string, string[]>>(resultObj: CSSResult<T>): void {
   /**
-   * registry เก็บว่า classKey ไหนมี finalVarName อะไรบ้าง
-   * เช่น registry["box"] = Set(["--bg-app_box", "--color-app_box", ...])
+   * Registry that tracks which variable names have been set for each classKey.
+   * Example: registry["box"] = Set(["--bg-app_box", "--color-app_box", ...])
    */
   const registry: Record<string, Set<string>> = {};
 
   /**
-   * สำหรับ type overload ของ .get(...)
-   * - .set(props)
-   * - .reset(keys?)  (optional keys เหมือน code เก่า)
-   * - .value(keys)   (ต้องส่ง keys เสมอ)
+   * Overloaded .get(...) function that returns an object containing
+   * set(...), reset(...), and value(...) methods.
    */
   function get<K2 extends keyof T>(
     classKey: K2
@@ -33,8 +34,7 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
   };
 
   /**
-   * ฟังก์ชันหลักรับเป็น string (classKey)
-   * ถ้าไม่มี classKey ใน resultObj => return no-op (ตาม code เก่า)
+   * Fallback function signature that does nothing if the provided key is invalid.
    */
   function get(arg1: string) {
     if (typeof arg1 === 'string') {
@@ -47,13 +47,13 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
         };
       }
 
-      // parseDisplayName => { scope, cls }
+      // Parse the displayName to extract scope and class parts.
       const { scope, cls } = parseDisplayName(displayName);
 
       return {
         /**
-         * set(props) => สำหรับ setProperty (เป็น final varName)
-         * เก็บลง registry ด้วย
+         * set(props) updates the final variable names via pushSetAction.
+         * Also stores them in the registry to allow subsequent resets.
          */
         set(props: PropsForGlobalClass<T[keyof T]>) {
           if (scope === 'none') {
@@ -68,15 +68,15 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             const { baseVarName, suffix } = parseVariableAbbr(abbr);
             const finalVarName = buildVariableName(baseVarName, scope, cls, suffix);
 
-            // ถ้ามี --xxx ให้แทนเป็น var(--xxx)
+            // Replace any reference to `--var` with `var(--var)`
             if (val.includes('--')) {
               val = val.replace(/(--[\w-]+)/g, 'var($1)');
             }
 
-            // push action => setProperty (override action เดิมหากมี)
+            // Schedule a set action and override any previous action for the same var.
             pushSetAction(finalVarName, val);
 
-            // เก็บลง registry เพื่อให้ reset ได้ภายหลัง
+            // Track the final variable name in the registry.
             if (!registry[arg1]) {
               registry[arg1] = new Set<string>();
             }
@@ -85,9 +85,8 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
         },
 
         /**
-         * reset(keys?) => removeProperty เฉพาะที่เคย set ไว้
-         * ถ้าไม่ส่ง keys => removeProperty ทั้งหมดของ classKey
-         * (ยังคงเหมือน code เก่า)
+         * reset(keys?) removes the specified properties if keys are provided.
+         * If no keys are provided, remove all properties previously set for this classKey.
          */
         reset(keys?: Array<T[keyof T][number]>) {
           if (scope === 'none') {
@@ -97,7 +96,7 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             return;
           }
 
-          // reset all
+          // If no keys are provided, remove all properties for this classKey.
           if (!keys) {
             for (const varName of registry[arg1]) {
               pushRemoveAction(varName);
@@ -106,7 +105,7 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             return;
           }
 
-          // reset เฉพาะ key ที่ส่งมา
+          // Otherwise, remove only the specified keys.
           for (const abbr of keys) {
             const { baseVarName, suffix } = parseVariableAbbr(abbr);
             const finalVarName = buildVariableName(baseVarName, scope, cls, suffix);
@@ -119,25 +118,28 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
         },
 
         /**
-         * value(keys): Promise => รอให้ flushAll() ทำงานเสร็จ
-         * แล้วค่อยอ่านค่าจริงจาก DOM (inline + fallback computed)
-         * (บังคับต้องส่ง array of keys)
+         * value(keys) returns the current value of the specified keys.
+         * It waits for the next flush cycle to ensure any pending sets/resets
+         * have been applied before returning the computed or inline values.
          */
         async value(keys: Array<T[keyof T][number]>) {
           if (scope === 'none') {
             return {};
           }
 
-          // รอรอบ rAF ถัดไป ถ้ามีการ set/reset ที่ยัง pending
+          // Ensure all queued set/remove actions have been flushed.
           await waitForNextFlush();
 
-          const result: Record<T[keyof T][number], { prop: string; value: string }> = {} as any;
+          const result: Record<
+            T[keyof T][number],
+            { prop: string; value: string }
+          > = {} as any;
 
           for (const abbr of keys) {
             const { baseVarName, suffix } = parseVariableAbbr(abbr);
             const finalVarName = buildVariableName(baseVarName, scope, cls, suffix);
 
-            // อ่านจาก inline style ก่อน ถ้าไม่มีจึง fallback getComputedStyle
+            // Check inline style first, then fallback to computed style.
             const computedVal =
               document.documentElement.style.getPropertyValue(finalVarName) ||
               getComputedStyle(document.documentElement).getPropertyValue(finalVarName);
@@ -153,12 +155,12 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
       };
     }
 
-    // fallback no-op
+    // Fallback no-op if the argument is not a string.
     return { set: () => {}, reset: () => {}, value: async () => ({}) };
   }
 
   /**
-   * resetAll(): ล้างตัวแปรทั้งหมดของ resultObj (ทุก classKey, ทุก varName)
+   * resetAll() removes all properties stored in the registry for every classKey.
    */
   function resetAll() {
     for (const classKey in registry) {
@@ -170,7 +172,7 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
     }
   }
 
-  // ติดตั้งเมธอด get + resetAll ให้ resultObj
+  // Attach the get method and the global resetAll method to the result object.
   (resultObj as any).get = get;
   (resultObj as any).reset = resetAll;
 }

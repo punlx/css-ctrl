@@ -1,5 +1,9 @@
 // src/client/utils/parseVariableAbbr.ts
 
+/**
+ * Splits a variable abbreviation into the base variable name and the suffix.
+ * For example, "bg-color" -> { baseVarName: "bg", suffix: "color" }.
+ */
 export function parseVariableAbbr(abbr: string): {
   baseVarName: string;
   suffix: string;
