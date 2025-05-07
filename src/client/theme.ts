@@ -125,7 +125,7 @@ export const theme = {
       modes,
       getCurrentMode: () => localStorage?.getItem('css-ctrl-theme') || initialMode,
       // for SSR
-      initialTheme: () => initialTheme(modes),
+      init: () => initialTheme(modes),
     };
   },
 
