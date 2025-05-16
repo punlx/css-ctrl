@@ -18,76 +18,126 @@
 ::-webkit-scrollbar-thumb:hover {
   background-color: #777;
 }
-
-dialog:-internal-dialog-in-top-layer {
-  max-width: 100%;
-  max-height: var(--dialogInternalPluginMaxHeight);
-}
-
-dialog {
-  position: absolute;
+/* ------------------------------
+   Overlay หลัก ที่ครอบทั้ง dialog
+   ------------------------------ */
+.dialogPluginOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
   display: flex;
+  align-items: var(--dialogInternalPluginAlignItems, baseline);
   justify-content: center;
-  width: var(--dialogPluginWidth);
-  background-color: transparent;
-  border-style: none;
-  padding: 0;
-}
-
-dialog[open] {
   opacity: 0;
-  transform: var(--dialogPluginFadeScale);
-  animation: dialogPluginFadeIn var(--dialogPluginFadeDuration) ease-out forwards;
+  pointer-events: none;
+  overflow: hidden;
+  background-color: var(--dialogPluginBackdropColor, rgba(0, 0, 0, 0.5));
+  padding-top: var(--dialogPluginScrollBodyPadding, 0);
+  padding-bottom: var(--dialogPluginScrollBodyPadding, 0);
+  box-sizing: border-box;
 }
 
-dialog.dialogPluginFadeOutClass {
-  animation: dialogPluginFadeOut var(--dialogPluginFadeDuration) ease-in forwards;
+.dialogPluginOverlay.dialogPluginOpen {
+  pointer-events: auto;
+  animation: overlayFadeIn var(--dialogPluginFadeDuration, 300ms) ease-out forwards;
 }
 
-@keyframes dialogPluginFadeIn {
+.dialogPluginOverlay.dialogPluginFadeOutClass {
+  animation: overlayFadeOut var(--dialogPluginFadeDuration, 300ms) ease-in forwards;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlayFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* 
+   ----------
+   Scroll Mode
+   ----------
+   ถ้า scroll: 'body' => overlay อาจเลื่อนดูได้
+   ถ้า scroll: 'modal' => overlay ไม่ scroll แต่ให้ content ข้างในเป็นตัวเลื่อน
+*/
+
+.dialogPluginOverlay.dialogPluginScrollBody {
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+.dialogPluginOverlay.dialogPluginScrollModal {
+  overflow: hidden;
+}
+
+/* ---------------------
+   Content ของ Dialog
+   --------------------- */
+.dialogPluginContent,
+.dialogPluginContainer {
+  position: relative;
+  background-color: #fff;
+  width: var(--dialogPluginWidth, auto);
+  max-height: var(--dialogInternalPluginMaxHeight, 100%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transform: var(--dialogPluginFadeScale, scale(0.9));
+}
+
+/* scroll: 'modal' => content scroll */
+.dialogPluginOverlay.dialogPluginScrollModal .dialogPluginContent,
+.dialogPluginOverlay.dialogPluginScrollModal .dialogPluginContainer {
+  overflow: auto;
+}
+
+/* scroll: 'body' => content ไม่ต้องกำหนด overflow */
+.dialogPluginOverlay.dialogPluginScrollBody .dialogPluginContent,
+.dialogPluginOverlay.dialogPluginScrollBody .dialogPluginContainer {
+  overflow: visible;
+}
+
+/* animation ของ content */
+.dialogPluginOverlay.dialogPluginOpen .dialogPluginContent,
+.dialogPluginOverlay.dialogPluginOpen .dialogPluginContainer {
+  animation: contentFadeIn var(--dialogPluginFadeDuration, 300ms) ease-out forwards;
+}
+
+.dialogPluginOverlay.dialogPluginFadeOutClass .dialogPluginContent,
+.dialogPluginOverlay.dialogPluginFadeOutClass .dialogPluginContainer {
+  animation: contentFadeOut var(--dialogPluginFadeDuration, 300ms) ease-in forwards;
+}
+
+@keyframes contentFadeIn {
   to {
     opacity: 1;
     transform: scale(1);
   }
 }
 
-@keyframes dialogPluginFadeOut {
+@keyframes contentFadeOut {
   from {
     opacity: 1;
     transform: scale(1);
   }
   to {
     opacity: 0;
-    transform: var(--dialogPluginFadeScale);
+    transform: var(--dialogPluginFadeScale, scale(0.9));
   }
 }
-
-dialog[open]::backdrop {
-  animation: dialogPluginFadeBackdropIn var(--dialogPluginFadeDuration) ease-out forwards;
-}
-
-dialog.dialogPluginFadeOutClass::backdrop {
-  animation: dialogPluginFadeBackdropOut var(--dialogPluginFadeDuration) ease-in forwards;
-}
-
-@keyframes dialogPluginFadeBackdropIn {
-  from {
-    background-color: rgba(0, 0, 0, 0);
-  }
-  to {
-    background-color: var(--dialogPluginBackdropColor);
-  }
-}
-
-@keyframes dialogPluginFadeBackdropOut {
-  from {
-    background-color: var(--dialogPluginBackdropColor);
-  }
-  to {
-    background-color: rgba(0, 0, 0, 0);
-  }
-}
-
 /* popover.css */
 
 /* .popoverPlugin.popoverPluginFadeInClass {
