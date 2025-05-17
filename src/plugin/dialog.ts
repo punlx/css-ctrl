@@ -1,20 +1,23 @@
 // src/plugin/dialog.ts
-
 import { createRoot } from 'react-dom/client';
 
 const DIALOG_PLUGIN_FADE_DURATION = 'dialogPluginFadeDuration';
 const DIALOG_PLUGIN_BACKDROP_COLOR = 'dialogPluginBackdropColor';
-const DIALOG_PLUGIN_Fade_SCALE = 'dialogPluginFadeScale';
+const DIALOG_PLUGIN_FADE_SCALE = 'dialogPluginFadeScale';
+const DIALOG_PLUGIN_SCROLL_BODY_PADDING = 'dialogPluginScrollBodyPadding';
+
 const DIALOG_PLUGIN_OVERFLOW = 'dialogPluginOverflow';
-const getDialogInternalPLuginMaxHeight = (scroll: 'body' | 'modal') =>
-  scroll === 'body' ? '100%' : 'calc(100% - 6em)';
+const getDialogInternalPluginMaxHeight = (scroll: 'overlay' | 'modal') =>
+  scroll === 'overlay' ? 'fit-content' : '100%';
+const getAlignItems = (scroll: 'overlay' | 'modal') =>
+  scroll === 'overlay' ? 'baseline' : 'center';
 const DIALOG_INTERNAL_PLUGIN_MAX_HEIGHT = 'dialogInternalPluginMaxHeight';
+const DIALOG_INTERNAL_PLUGIN_ALIGN_ITEMS = 'dialogInternalPluginAlignItems';
 const DIALOG_PLUGIN_WIDTH = 'dialogPluginWidth';
 
-const getDialogPluginWidth = (scroll: 'body' | 'modal') =>
-  scroll === 'body' ? '100%' : 'fit-content';
+const getDialogPluginWidth = (scroll: 'overlay' | 'modal') =>
+  scroll === 'overlay' ? '100%' : 'fit-content';
 
-// Callback สำหรับ dialog
 interface DialogCallbackInfo {
   open: boolean;
 }
@@ -30,53 +33,36 @@ interface DialogEvents {
 
 interface DialogItems {
   state?: { open: boolean };
-  dialog?: HTMLDialogElement | null;
-  root?: any; // React Root
-  modal?: any; // JSX/ReactNode
-
-  // เพิ่มเพื่อเก็บ element ก่อนหน้า (สำหรับ restore focus)
+  dialog?: HTMLDivElement | null;
+  root?: any;
+  modal?: any;
   previousActiveElement?: HTMLElement | null;
+  previousBodyOverflow?: string;
 }
 
-// เก็บทั้งหมดไว้ใน storage.dialog
 interface DialogState {
   dialogItems: DialogItems;
   _events: DialogEvents;
 }
 
-/**
- * DialogStorage: interface ของ storage ที่ใช้ใน plugin dialog
- * (extend Record<string,unknown>) => TS ยอมให้มี property อื่นด้วย
- */
 interface DialogStorage extends Record<string, unknown> {
   dialog: DialogState;
 }
 
-/**
- * dialog plugin จะคืน API
- *
- */
 interface DialogPluginOptions {
   id: string;
   modal: any;
   heading: string;
   fadeDuration?: number;
   fadeScale?: number;
-  close?: 'outside-close' | 'close-action'; // โดย outside-close = esc + backdrop ปิด, close-action = ปิดด้วย .close() เท่านั้น
-  scroll?: 'body' | 'modal';
+  close?: 'outside-close' | 'close-action';
+  scroll?: 'overlay' | 'modal';
   backdropColor?: string;
   describe?: string;
-  states?: any;
-
-  // เพิ่ม property ใหม่เพื่อใช้สร้าง headingId
+  offset?: string;
 }
 
-/**
- * สุดท้าย: เดิมเคยเป็น CssCtrlPlugin<T> = (storage: DialogStorage, className: string) => T
- * ตอนนี้ปรับให้เรียกแบบ: const dialogA = dialog(options); dialogA.action.show();
- */
 export function dialog(options: DialogPluginOptions) {
-  // สร้าง "dummy storage" แบบที่เคยมีในฟอร์ม plugin
   const storage: DialogStorage = {
     dialog: {
       dialogItems: {},
@@ -84,22 +70,18 @@ export function dialog(options: DialogPluginOptions) {
     },
   };
 
-  // คง logic เดิมทุกบรรทัด
-  // เปลี่ยนชื่อตัวแปรจาก close -> closeMode เพื่อไม่ชนกับ function close()
   const {
     modal,
     fadeDuration = 300,
-    scroll = 'body',
+    scroll = 'overlay',
     backdropColor = '#00000080',
     fadeScale = 0.9,
     describe,
     heading,
-    close: closeMode = 'close-action', // rename destructured property
-    id, // รับค่าจาก options.id,
-    states,
+    close: closeMode = 'close-action',
+    id,
+    offset = '3em',
   } = options as DialogPluginOptions;
-
-  // ===== Utility =====
 
   function getState(): { open: boolean } {
     return storage.dialog.dialogItems.state || { open: false };
@@ -112,41 +94,31 @@ export function dialog(options: DialogPluginOptions) {
     }
   }
 
-  function onBackdropClick(e: MouseEvent) {
-    // ถ้า user คลิกบนตัว dialogEl เอง (ไม่ใช่ลูกภายใน)
-    if (e.target === e.currentTarget) {
-      // ถ้า closeMode เป็น outside-close => อนุญาตให้ปิด
-      if (closeMode === 'outside-close') {
-        closeDialog();
-      }
+  function onOverlayClick(e: MouseEvent) {
+    if (closeMode !== 'outside-close') return;
+    if (e.target === storage.dialog.dialogItems.dialog) {
+      closeDialog();
     }
   }
 
-  // ====== Focus Trap และ ESC Close ======
   function trapFocus(e: KeyboardEvent) {
     if (e.key === 'Tab') {
       const dialogEl = storage.dialog.dialogItems.dialog;
       if (!dialogEl) return;
-
-      // หา focusable elements ใน dialog
       const focusableElements = Array.from(
         dialogEl.querySelectorAll(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         )
       ) as HTMLElement[];
-
       if (!focusableElements.length) return;
       const firstElement = focusableElements[0];
       const lastElement = focusableElements[focusableElements.length - 1];
-
       if (e.shiftKey) {
-        // SHIFT + TAB
         if (document.activeElement === firstElement) {
           e.preventDefault();
           lastElement.focus();
         }
       } else {
-        // TAB
         if (document.activeElement === lastElement) {
           e.preventDefault();
           firstElement.focus();
@@ -157,73 +129,61 @@ export function dialog(options: DialogPluginOptions) {
 
   function handleEscKey(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      // ถ้าเป็น outside-close => อนุญาตให้ปิดด้วย ESC
       if (closeMode === 'outside-close') {
         closeDialog();
       }
     }
   }
 
-  // ===== Action =====
-
   function show() {
     callEvent('willShow');
-
-    // ถ้ามี dialog อยู่แล้ว => error
     if (storage.dialog.dialogItems.dialog) {
       throw new Error('[dialog plugin] already open');
     }
-
-    // บันทึกองค์ประกอบที่โฟกัสอยู่ก่อนเปิด dialog
     storage.dialog.dialogItems.previousActiveElement = document.activeElement as HTMLElement;
 
-    // 1) สร้าง <dialog>
-    const dialogEl = document.createElement('dialog');
+    storage.dialog.dialogItems.previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
 
-    // set attribute สำหรับ dialog
-    dialogEl.role = 'dialog';
-    dialogEl.tabIndex = -1;
-    dialogEl.ariaModal = 'true';
-
-    if (describe) {
-      dialogEl.setAttribute('aria-describedby', `${id}-${describe}`);
-    }
-
-    // ===== เพิ่ม logic สำหรับ headingId =====
-    // ถ้า dev ใส่ทั้ง id และ labelledby => สร้าง headingId = `${id}-${heading}`
-    // แล้วใช้ setAttribute('aria-labelledby', headingId) เพื่อ override
-    dialogEl.setAttribute('aria-labelledby', `${id}-${heading}`);
-
-    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_OVERFLOW}`, `hidden`);
+    const dialogEl = document.createElement('div');
+    dialogEl.classList.add('dialogPluginOverlay');
+    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_OVERFLOW}`, 'hidden');
     dialogEl.style.setProperty(`--${DIALOG_PLUGIN_FADE_DURATION}`, `${fadeDuration}ms`);
     dialogEl.style.setProperty(`--${DIALOG_PLUGIN_BACKDROP_COLOR}`, backdropColor);
-    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_Fade_SCALE}`, `scale(${fadeScale})`);
-
+    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_FADE_SCALE}`, `scale(${fadeScale})`);
     dialogEl.style.setProperty(
       `--${DIALOG_INTERNAL_PLUGIN_MAX_HEIGHT}`,
-      `${getDialogInternalPLuginMaxHeight(scroll)}`
+      `${getDialogInternalPluginMaxHeight(scroll)}`
     );
+    dialogEl.style.setProperty(
+      `--${DIALOG_INTERNAL_PLUGIN_ALIGN_ITEMS}`,
+      `${getAlignItems(scroll)}`
+    );
+    dialogEl.style.setProperty(`--${DIALOG_PLUGIN_SCROLL_BODY_PADDING}`, offset);
 
     dialogEl.style.setProperty(`--${DIALOG_PLUGIN_WIDTH}`, `${getDialogPluginWidth(scroll)}`);
 
-    document.body.appendChild(dialogEl);
+    if (scroll === 'overlay') {
+      dialogEl.classList.add('dialogPluginScrollBody');
+    } else {
+      dialogEl.classList.add('dialogPluginScrollModal');
+    }
 
-    // 1.1) สร้าง child container
     const contentDiv = document.createElement('div');
-    // contentDiv.classList.add(className);
-
-    // เพิ่มการกำหนด tabIndex = -1 ให้ contentDiv เพื่อให้โฟกัสได้
-    contentDiv.setAttribute('tabIndex', '-1');
-    contentDiv.classList.add('dialogPluginContainer');
-
+    contentDiv.classList.add('dialogPluginContent', 'dialogPluginContainer');
+    contentDiv.role = 'dialog';
+    contentDiv.tabIndex = -1;
+    contentDiv.setAttribute('aria-modal', 'true');
+    if (describe) {
+      contentDiv.setAttribute('aria-describedby', `${id}-${describe}`);
+    }
+    contentDiv.setAttribute('aria-labelledby', `${id}-${heading}`);
     dialogEl.appendChild(contentDiv);
 
-    // 2) render(modal) ลงใน contentDiv
+    document.body.appendChild(dialogEl);
     const root = createRoot(contentDiv);
     root.render(modal);
 
-    // ======= NEW CODE: ตรวจสอบว่ามี heading element ID ตรงตามที่กำหนดหรือไม่ =======
-    // ทำใน requestAnimationFrame หรือ setTimeout เพื่อให้ React render เสร็จก่อน
     requestAnimationFrame(() => {
       const headingSelector = `#${id}-${heading}`;
       const headingElement = contentDiv.querySelector(headingSelector);
@@ -231,103 +191,89 @@ export function dialog(options: DialogPluginOptions) {
         console.warn(
           `[CSS-CTRL-WARN] Missing heading element in modal "${id}".\n\n` +
             `To ensure accessibility (A11y), add a heading like:\n` +
-            `  <h1 id={dialogInstance.aria.heading}>Your Dialog Title</h1>\n` +
-            `  // dialogInstance.aria.heading === '${headingSelector}'\n\n` +
+            `  <h1 id={dialogInstance.aria.heading.id}>Your Dialog Title</h1>\n\n` +
             `This allows screen readers to announce the dialog title via aria-labelledby.`
         );
       }
     });
 
-    // เดิม: ถ้า backdropCloseable => ผูก event click => onBackdropClick
-    // ปัจจุบัน: ถ้า closeMode === 'outside-close' => ให้คลิก backdrop เพื่อปิด
     if (closeMode === 'outside-close') {
-      dialogEl.addEventListener('click', onBackdropClick);
-    }
-
-    // ผูก keydown สำหรับ trapFocus เสมอ
-    dialogEl.addEventListener('keydown', trapFocus);
-
-    // ถ้าเป็น outside-close => ผูก ESC
-    if (closeMode === 'outside-close') {
+      dialogEl.addEventListener('click', onOverlayClick);
       dialogEl.addEventListener('keydown', handleEscKey);
     }
+    dialogEl.addEventListener('keydown', trapFocus);
 
-    // 3) เก็บอ้างอิง
     storage.dialog.dialogItems.dialog = dialogEl;
     storage.dialog.dialogItems.root = root;
     storage.dialog.dialogItems.state = { open: true };
 
     callEvent('show');
-    (dialogEl as HTMLDialogElement).showModal();
+    dialogEl.classList.add('dialogPluginOpen');
     callEvent('didShow');
 
-    // กำหนดโฟกัสเริ่มต้นใน dialog (focus ที่องค์ประกอบแรกที่โฟกัสได้ หรือ dialogEl เองเป็น fallback)
     requestAnimationFrame(() => {
-      const focusableElements = dialogEl.querySelectorAll<HTMLElement>(
+      const focusableElements = contentDiv.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
       if (focusableElements.length > 0) {
         focusableElements[0].focus();
       } else {
-        // เดิมคือ dialogEl.focus();
-        // contentDiv.setAttribute('tabIndex','-1'); // ได้ถูกกำหนดไว้แล้วด้านบน
-        // เราเปลี่ยนมา focus ที่ contentDiv แทน
-        // ถ้าต้องการคงโค้ดเดิมไว้ให้ดู สามารถคอมเมนต์ได้ดังนี้:
-        // dialogEl.focus(); // (commented out เพื่อไม่ลบ logic เดิม)
         contentDiv.focus();
       }
+    });
+
+    requestAnimationFrame(() => {
+      dialogEl.scrollTo({
+        top: 0,
+      });
     });
   }
 
   function closeDialog() {
     callEvent('willClose');
     if (!storage.dialog.dialogItems.dialog) return;
-
     const dialogEl = storage.dialog.dialogItems.dialog;
 
-    // ลบ listener ถ้ามี
+    // ตรงนี้ ให้เอา document.body.style.overflow กลับออกก่อน
+    // document.body.style.overflow = storage.dialog.dialogItems.previousBodyOverflow || '';
+
     if (closeMode === 'outside-close') {
-      dialogEl.removeEventListener('click', onBackdropClick);
+      dialogEl.removeEventListener('click', onOverlayClick);
       dialogEl.removeEventListener('keydown', handleEscKey);
     }
-
     dialogEl.removeEventListener('keydown', trapFocus);
 
+    dialogEl.classList.remove('dialogPluginOpen');
     dialogEl.classList.add('dialogPluginFadeOutClass');
+
     requestAnimationFrame(() => {
       dialogEl.addEventListener(
         'animationend',
         () => {
+          // เมื่อ animation fadeout จบ ค่อยคืนค่า scroll ของ body
+          document.body.style.overflow = storage.dialog.dialogItems.previousBodyOverflow || '';
+
           dialogEl.classList.remove('dialogPluginFadeOutClass');
-          dialogEl.close();
           storage.dialog.dialogItems.state = { open: false };
           callEvent('closed');
-
-          // unmount react
           if (storage.dialog.dialogItems.root) {
             storage.dialog.dialogItems.root.unmount?.();
             storage.dialog.dialogItems.root = null;
           }
-
-          // เอา <dialog> ออกจาก DOM
           if (dialogEl.parentNode) {
             dialogEl.parentNode.removeChild(dialogEl);
           }
           storage.dialog.dialogItems.dialog = null;
-
-          // restore focus
           const prevFocus = storage.dialog.dialogItems.previousActiveElement;
           if (prevFocus && typeof prevFocus.focus === 'function') {
             prevFocus.focus();
           }
-
           callEvent('didClosed');
         },
         { once: true }
       );
     });
   }
-
   function close() {
     closeDialog();
   }
@@ -343,11 +289,6 @@ export function dialog(options: DialogPluginOptions) {
     };
   }
 
-  // ===== Return API =====
-
-  // นำ headingId (ซึ่งเป็นตัวเต็มของ id + heading) ใส่ใน output
-  // เพื่อให้ dev สามารถใช้เป็น id ใน React component
-
   return {
     action: {
       show,
@@ -355,7 +296,6 @@ export function dialog(options: DialogPluginOptions) {
       getState,
     },
     events,
-    // ส่งออก aria.heading ให้ใช้งานได้
     aria: {
       heading: {
         id: `${id}-${heading}`,
@@ -364,6 +304,5 @@ export function dialog(options: DialogPluginOptions) {
         id: `${id}-${describe}`,
       },
     },
-    states,
   };
 }

@@ -1,107 +1,62 @@
-// src/client/theme.ts
+// เราจะประกาศตัวแปร global เพื่อเก็บชุด modes ล่าสุดที่เคยใช้
+// (เป็นวิธีสั้น ๆ ที่ไม่ต้องใช้ version หรือ paletteId)
+let oldModes: string[] = [];
 
-const keyframeRuntimeDict: Record<string, Record<string, { set: (props: any) => void }>> = {};
-
-function parseKeyframeAbbr(
-  abbrBody: string,
-  keyframeName: string,
-  blockLabel: string
-): {
-  cssText: string;
-  varMap: Record<string, string>;
-  defaultVars: Record<string, string>;
-} {
-  const regex = /([\w\-\$]+)\[(.*?)\]/g;
-  let match: RegExpExecArray | null;
-
-  let cssText = '';
-  const varMap: Record<string, string> = {};
-  const defaultVars: Record<string, string> = {};
-
-  while ((match = regex.exec(abbrBody)) !== null) {
-    let styleAbbr = match[1];
-    let propVal = match[2];
-
-    if (propVal.includes('--')) {
-      propVal = propVal.replace(/(--[\w-]+)/g, 'var($1)');
-    }
-
-    let isVar = false;
-    if (styleAbbr.startsWith('$')) {
-      isVar = true;
-      styleAbbr = styleAbbr.slice(1);
-    }
-
-    if (isVar) {
-      const finalVarName = `--${styleAbbr}-${keyframeName}-${blockLabel.replace('%', '')}`;
-      cssText += `${styleAbbr}:var(${finalVarName});`;
-      varMap[styleAbbr] = finalVarName;
-      defaultVars[finalVarName] = propVal;
-    } else {
-      cssText += `${styleAbbr}:${propVal};`;
-    }
-  }
-
-  return { cssText, varMap, defaultVars };
-}
-
-function parseKeyframeString(keyframeName: string, rawStr: string) {
-  const regex = /(\b(?:\d+%|from|to))\(([^)]*)\)/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(rawStr)) !== null) {
-    const label = match[1];
-    const abbrBody = match[2];
-
-    const { cssText, varMap, defaultVars } = parseKeyframeAbbr(
-      abbrBody.trim(),
-      keyframeName,
-      label
-    );
-
-    if (!keyframeRuntimeDict[keyframeName]) {
-      keyframeRuntimeDict[keyframeName] = {};
-    }
-    if (!keyframeRuntimeDict[keyframeName][label]) {
-      keyframeRuntimeDict[keyframeName][label] = {
-        set: (props: Record<string, string>) => {
-          for (const k in props) {
-            if (!k.startsWith('$')) {
-              console.error(`Only $var is allowed. got key="${k}"`);
-              continue;
-            }
-            const shortAbbr = k.slice(1);
-            const finalVarName = varMap[shortAbbr];
-            if (!finalVarName) {
-              console.warn(`No var for ${k} in block "${label}" of keyframe "${keyframeName}"`);
-              continue;
-            }
-            document.documentElement.style.setProperty(finalVarName, props[k]);
-          }
-        },
-      };
-    }
-  }
-}
-
+/**
+ * Removes previous themes and applies the specified theme at the <html> level.
+ * Also saves the current theme in localStorage if available.
+ */
 function setTheme(mode: string, modes: string[]) {
   if (typeof window !== 'undefined') {
     document.documentElement.classList.remove(...modes);
     document.documentElement.classList.add(mode);
     try {
       localStorage.setItem('css-ctrl-theme', mode);
-    } catch {}
+    } catch {
+      // Do nothing if localStorage is inaccessible
+    }
   }
 }
 
-const initialTheme = (modes: string[]) => {
+/**
+ * Initializes the theme by reading from localStorage (if available)
+ * or defaults to the first item in the modes array.
+ * เวอร์ชัน "วิธีสั้น ๆ" จะเช็คว่า modes ชุดใหม่ != modes เก่า
+ * ถ้าต่างกัน (เช่น เปลี่ยนลำดับหรือเปลี่ยนจำนวน) จะลบ localStorage เก่าทิ้ง
+ * เพื่อบังคับให้เริ่ม theme ใหม่
+ */
+function initialTheme(modes: string[]) {
+  if (typeof window === 'undefined') {
+    // SSR: ถ้าเป็นฝั่ง server ก็ไม่ต้องทำอะไร
+    return modes[0];
+  }
+
+  // เช็คว่า modes ปัจจุบัน ต่างจาก oldModes เก่าที่เคยใช้ไหม
+  // ถ้าต่างกัน => ลบค่า theme เก่าออก เพื่อ reset
+  if (!arrayEquals(oldModes, modes)) {
+    try {
+      localStorage.removeItem('css-ctrl-theme');
+    } catch {
+      // localStorage inaccessible ก็ข้ามไปได้
+    }
+    // จำว่าตอนนี้เราใช้ modes นี้อยู่
+    oldModes = [...modes];
+  }
+
   let saved = '';
   let currentMode = '';
   try {
+    // ถ้ามีค่าเก่าใน localStorage ก็เอาค่านั้น
+    // ถ้าไม่มีใช้ค่าแรกใน modes
     saved = localStorage.getItem('css-ctrl-theme') || modes[0];
-  } catch {}
+  } catch {
+    // ใช้ default ถ้า localStorage ใช้ไม่ได้
+    saved = modes[0];
+  }
 
-  if (saved && modes.indexOf(saved) !== -1) {
+  // ถ้า saved ยังอยู่ใน modes ก็ใช้ตามนั้น
+  // ถ้าไม่อยู่ ก็ fallback เป็นค่าแรกของ modes
+  if (modes.includes(saved)) {
     setTheme(saved, modes);
     currentMode = saved;
   } else {
@@ -110,45 +65,52 @@ const initialTheme = (modes: string[]) => {
   }
 
   return currentMode;
-};
+}
 
+/**
+ * ฟังก์ชันช่วยเทียบว่า array สองอันเท่ากันไหม (เทียบแบบ element ตรงตำแหน่ง)
+ * เพื่อใช้เช็คว่ามีการเปลี่ยนแปลงลำดับ/จำนวนนัดไหม
+ */
+function arrayEquals(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Exports a 'theme' object providing methods to switch among themes,
+ * manage breakpoints, typography, keyframes, etc.
+ * ในตัวอย่างนี้เราจะสนใจเฉพาะ palette() เป็นหลัก
+ */
 export const theme = {
   palette(colors: string[][]) {
     const modes = colors[0];
     const initialMode = modes[0];
-    // for CSR
-    if (window !== undefined) {
+    if (typeof window !== 'undefined') {
       initialTheme(modes);
     }
     return {
-      swtich: (mode: string) => setTheme(mode, modes),
+      // ใช้สลับ theme manually
+      switch: (mode: string) => setTheme(mode, modes),
       modes,
-      getCurrentMode: () => localStorage?.getItem('css-ctrl-theme') || initialMode,
-      // for SSR
-      initialTheme: () => initialTheme(modes),
+      // เอา theme ปัจจุบันออกมา (ถ้าบน server ก็คืนค่า default)
+      getCurrentMode: () => {
+        if (typeof window === 'undefined') return initialMode;
+        return localStorage?.getItem('css-ctrl-theme') || initialMode;
+      },
+      // เผื่อใช้ init ซ้ำในฝั่ง client
+      init: () => initialTheme(modes),
+      defaultMode: initialMode,
     };
   },
 
+  // ไว้สำหรับ css-ctrl compiler (ยังไม่เปิดใช้ในตัวอย่าง)
   breakpoint(breakpointList: Record<string, string>) {},
-
   typography(typoMap: Record<string, string>) {},
-
-  keyframe(keyframeMap: Record<string, string>) {
-    const resultObj: Record<string, Record<string, { set: (props: any) => void }>> = {};
-    for (const keyName in keyframeMap) {
-      const rawStr = keyframeMap[keyName];
-      parseKeyframeString(keyName, rawStr);
-
-      if (!keyframeRuntimeDict[keyName]) {
-        keyframeRuntimeDict[keyName] = {};
-      }
-      resultObj[keyName] = keyframeRuntimeDict[keyName];
-    }
-    return resultObj;
-  },
-
+  keyframe(keyframeMap: Record<string, string>) {},
   variable(variableMap: Record<string, string>) {},
-
-  define(styleMap: Record<string, Record<string, string>>) {},
+  property(styleMap: Record<string, Record<string, string>>) {},
   class(classMap: Record<string, string>) {},
 };
