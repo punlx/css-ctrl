@@ -47,7 +47,10 @@ export function css<T extends Record<string, string[]>>(
     const classSet = new Set<string>(originalVal.split(/\s+/).filter(Boolean));
 
     // Split the body into lines
-    const lines = b.body.split('\n').map((l) => l.trim()).filter(Boolean);
+    const lines = b.body
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
     for (const line of lines) {
       if (!line.startsWith('@bind ')) {
         continue;

@@ -1,6 +1,6 @@
 {
   "name": "css-ctrl",
-  "version": "0.4.5",
+  "version": "0.4.8",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {

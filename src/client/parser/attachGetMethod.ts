@@ -7,9 +7,9 @@ import { parseVariableAbbr } from '../utils/parseVariableAbbr';
 import { pushSetAction, pushRemoveAction, waitForNextFlush } from '../utils/flushAll';
 
 /**
- * Attaches `.get(...)` to the provided `CSSResult<T>` object.
- * This method enables chaining of `.set(...)`, `.reset(...)`, and `.value(...)` actions
- * on the registered classes. It also attaches a `.reset()` method that resets all
+ * Attaches .get(...) to the provided CSSResult<T> object.
+ * This method enables chaining of .set(...), .reset(...), and .value(...) actions
+ * on the registered classes. It also attaches a .reset() method that resets all
  * associated variables globally.
  */
 export function attachGetMethod<T extends Record<string, string[]>>(resultObj: CSSResult<T>): void {
@@ -26,7 +26,12 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
   function get<K2 extends keyof T>(
     classKey: K2
   ): {
-    set: (props: PropsForGlobalClass<T[K2]>) => void;
+    /**
+     * Overload 1: set(props) -> set CSS vars on the root (documentElement)
+     * Overload 2: set(element, props) -> set CSS vars on the specific HTMLElement
+     */
+    set(props: PropsForGlobalClass<T[K2]>): void;
+    set(target: HTMLElement, props: PropsForGlobalClass<T[K2]>): void;
     reset: (keys?: Array<T[K2][number]>) => void;
     value: (
       keys: Array<T[K2][number]>
@@ -52,12 +57,27 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
 
       return {
         /**
-         * set(props) updates the final variable names via pushSetAction.
+         * set(...) updates the final variable names via pushSetAction.
          * Also stores them in the registry to allow subsequent resets.
+         *
+         * ปรับปรุงให้รองรับ overload:
+         *    set(props)
+         *    set(element, props)
          */
-        set(props: PropsForGlobalClass<T[keyof T]>) {
+        set(...args: [any, any?]) {
           if (scope === 'none') {
             return;
+          }
+
+          let targetEl: HTMLElement;
+          let props: PropsForGlobalClass<T[keyof T]>;
+
+          if (args.length === 2 && args[0] instanceof HTMLElement) {
+            targetEl = args[0];
+            props = args[1];
+          } else {
+            targetEl = document.documentElement;
+            props = args[0];
           }
 
           const keys = Object.keys(props) as Array<keyof typeof props>;
@@ -68,13 +88,13 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             const { baseVarName, suffix } = parseVariableAbbr(abbr);
             const finalVarName = buildVariableName(baseVarName, scope, cls, suffix);
 
-            // Replace any reference to `--var` with `var(--var)`
+            // Replace any reference to --var with var(--var)
             if (val.includes('--')) {
               val = val.replace(/(--[\w-]+)/g, 'var($1)');
             }
 
             // Schedule a set action and override any previous action for the same var.
-            pushSetAction(finalVarName, val);
+            pushSetAction(finalVarName, val, targetEl);
 
             // Track the final variable name in the registry.
             if (!registry[arg1]) {
@@ -130,10 +150,7 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
           // Ensure all queued set/remove actions have been flushed.
           await waitForNextFlush();
 
-          const result: Record<
-            T[keyof T][number],
-            { prop: string; value: string }
-          > = {} as any;
+          const result: Record<T[keyof T][number], { prop: string; value: string }> = {} as any;
 
           for (const abbr of keys) {
             const { baseVarName, suffix } = parseVariableAbbr(abbr);
