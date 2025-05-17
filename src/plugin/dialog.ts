@@ -7,15 +7,16 @@ const DIALOG_PLUGIN_FADE_SCALE = 'dialogPluginFadeScale';
 const DIALOG_PLUGIN_SCROLL_BODY_PADDING = 'dialogPluginScrollBodyPadding';
 
 const DIALOG_PLUGIN_OVERFLOW = 'dialogPluginOverflow';
-const getDialogInternalPluginMaxHeight = (scroll: 'body' | 'modal') =>
-  scroll === 'body' ? 'fit-content' : '100%';
-const getAlignItems = (scroll: 'body' | 'modal') => (scroll === 'body' ? 'baseline' : 'center');
+const getDialogInternalPluginMaxHeight = (scroll: 'overlay' | 'modal') =>
+  scroll === 'overlay' ? 'fit-content' : '100%';
+const getAlignItems = (scroll: 'overlay' | 'modal') =>
+  scroll === 'overlay' ? 'baseline' : 'center';
 const DIALOG_INTERNAL_PLUGIN_MAX_HEIGHT = 'dialogInternalPluginMaxHeight';
 const DIALOG_INTERNAL_PLUGIN_ALIGN_ITEMS = 'dialogInternalPluginAlignItems';
 const DIALOG_PLUGIN_WIDTH = 'dialogPluginWidth';
 
-const getDialogPluginWidth = (scroll: 'body' | 'modal') =>
-  scroll === 'body' ? '100%' : 'fit-content';
+const getDialogPluginWidth = (scroll: 'overlay' | 'modal') =>
+  scroll === 'overlay' ? '100%' : 'fit-content';
 
 interface DialogCallbackInfo {
   open: boolean;
@@ -55,7 +56,7 @@ interface DialogPluginOptions {
   fadeDuration?: number;
   fadeScale?: number;
   close?: 'outside-close' | 'close-action';
-  scroll?: 'body' | 'modal';
+  scroll?: 'overlay' | 'modal';
   backdropColor?: string;
   describe?: string;
   offset?: string;
@@ -72,7 +73,7 @@ export function dialog(options: DialogPluginOptions) {
   const {
     modal,
     fadeDuration = 300,
-    scroll = 'body',
+    scroll = 'overlay',
     backdropColor = '#00000080',
     fadeScale = 0.9,
     describe,
@@ -162,7 +163,7 @@ export function dialog(options: DialogPluginOptions) {
 
     dialogEl.style.setProperty(`--${DIALOG_PLUGIN_WIDTH}`, `${getDialogPluginWidth(scroll)}`);
 
-    if (scroll === 'body') {
+    if (scroll === 'overlay') {
       dialogEl.classList.add('dialogPluginScrollBody');
     } else {
       dialogEl.classList.add('dialogPluginScrollModal');
