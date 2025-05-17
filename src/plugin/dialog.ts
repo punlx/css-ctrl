@@ -220,6 +220,12 @@ export function dialog(options: DialogPluginOptions) {
         contentDiv.focus();
       }
     });
+
+    requestAnimationFrame(() => {
+      dialogEl.scrollTo({
+        top: 0,
+      });
+    });
   }
 
   function closeDialog() {
