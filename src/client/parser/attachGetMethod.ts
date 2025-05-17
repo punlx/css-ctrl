@@ -32,10 +32,24 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
      */
     set(props: PropsForGlobalClass<T[K2]>): void;
     set(target: HTMLElement, props: PropsForGlobalClass<T[K2]>): void;
+
+    /**
+     * reset(keys?: ...) removes the specified properties if keys are provided,
+     * or all properties previously set for this classKey if no keys.
+     */
     reset: (keys?: Array<T[K2][number]>) => void;
-    value: (
+
+    /**
+     * Overload 1: value(keys) -> read from root
+     * Overload 2: value(element, keys) -> read from the specified HTMLElement
+     */
+    value(
       keys: Array<T[K2][number]>
-    ) => Promise<Record<T[K2][number], { prop: string; value: string }>>;
+    ): Promise<Record<T[K2][number], { prop: string; value: string }>>;
+    value(
+      target: HTMLElement,
+      keys: Array<T[K2][number]>
+    ): Promise<Record<T[K2][number], { prop: string; value: string }>>;
   };
 
   /**
@@ -60,9 +74,9 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
          * set(...) updates the final variable names via pushSetAction.
          * Also stores them in the registry to allow subsequent resets.
          *
-         * ปรับปรุงให้รองรับ overload:
-         *    set(props)
-         *    set(element, props)
+         * รองรับ overload:
+         *   set(props)
+         *   set(element, props)
          */
         set(...args: [any, any?]) {
           if (scope === 'none') {
@@ -138,13 +152,28 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
         },
 
         /**
-         * value(keys) returns the current value of the specified keys.
+         * value(...) returns the current value of the specified keys.
+         * Overload:
+         *   value(keys)
+         *   value(element, keys)
+         *
          * It waits for the next flush cycle to ensure any pending sets/resets
          * have been applied before returning the computed or inline values.
          */
-        async value(keys: Array<T[keyof T][number]>) {
+        async value(...args: [any, any?]) {
           if (scope === 'none') {
             return {};
+          }
+
+          let targetEl: HTMLElement;
+          let keys: Array<T[keyof T][number]>;
+
+          if (args.length === 2 && args[0] instanceof HTMLElement) {
+            targetEl = args[0];
+            keys = args[1];
+          } else {
+            targetEl = document.documentElement;
+            keys = args[0];
           }
 
           // Ensure all queued set/remove actions have been flushed.
@@ -156,10 +185,10 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             const { baseVarName, suffix } = parseVariableAbbr(abbr);
             const finalVarName = buildVariableName(baseVarName, scope, cls, suffix);
 
-            // Check inline style first, then fallback to computed style.
+            // Check inline style first, then fallback to computed style (from targetEl).
+            const inlineVal = targetEl.style.getPropertyValue(finalVarName);
             const computedVal =
-              document.documentElement.style.getPropertyValue(finalVarName) ||
-              getComputedStyle(document.documentElement).getPropertyValue(finalVarName);
+              inlineVal || getComputedStyle(targetEl).getPropertyValue(finalVarName);
 
             result[abbr] = {
               prop: finalVarName,

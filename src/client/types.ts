@@ -21,15 +21,22 @@ export type CSSResult<T extends Record<string, string[]>> = {
   get<K2 extends keyof T>(
     classKey: K2
   ): {
-    // ปรับตรงนี้ ให้ set มี 2 overload
+    // Overload for set
     set: {
       (props: PropsForGlobalClass<T[K2]>): void;
       (element: HTMLElement, props: PropsForGlobalClass<T[K2]>): void;
     };
+
+    // Overload for reset (ยังคงเหมือนเดิม, keys optional)
     reset: (keys?: Array<T[K2][number]>) => void;
-    value: (
-      keys: Array<T[K2][number]>
-    ) => Promise<Record<T[K2][number], { prop: string; value: string }>>;
+
+    // Overload for value
+    value: {
+      (keys: Array<T[K2][number]>): Promise<Record<T[K2][number], { prop: string; value: string }>>;
+      (element: HTMLElement, keys: Array<T[K2][number]>): Promise<
+        Record<T[K2][number], { prop: string; value: string }>
+      >;
+    };
   };
   reset(): void;
 };
