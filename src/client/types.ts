@@ -27,8 +27,13 @@ export type CSSResult<T extends Record<string, string[]>> = {
       (element: HTMLElement, props: PropsForGlobalClass<T[K2]>): void;
     };
 
-    // Overload for reset (ยังคงเหมือนเดิม, keys optional)
-    reset: (keys?: Array<T[K2][number]>) => void;
+    // Overload for reset
+    reset: {
+      (): void;
+      (keys: Array<T[K2][number]>): void;
+      (element: HTMLElement): void;
+      (element: HTMLElement, keys: Array<T[K2][number]>): void;
+    };
 
     // Overload for value
     value: {
@@ -38,5 +43,6 @@ export type CSSResult<T extends Record<string, string[]>> = {
       >;
     };
   };
+
   reset(): void;
 };

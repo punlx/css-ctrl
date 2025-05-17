@@ -15,9 +15,9 @@ import { pushSetAction, pushRemoveAction, waitForNextFlush } from '../utils/flus
 export function attachGetMethod<T extends Record<string, string[]>>(resultObj: CSSResult<T>): void {
   /**
    * Registry that tracks which variable names have been set for each classKey.
-   * Example: registry["box"] = Set(["--bg-app_box", "--color-app_box", ...])
+   * Example: registry["box"] = Map<HTMLElement, Set(["--bg-app_box", "--color-app_box", ...])>
    */
-  const registry: Record<string, Set<string>> = {};
+  const registry: Record<string, Map<HTMLElement, Set<string>>> = {};
 
   /**
    * Overloaded .get(...) function that returns an object containing
@@ -34,10 +34,12 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
     set(target: HTMLElement, props: PropsForGlobalClass<T[K2]>): void;
 
     /**
-     * reset(keys?: ...) removes the specified properties if keys are provided,
-     * or all properties previously set for this classKey if no keys.
+     * Overload 1: reset() -> remove all varNames for this classKey on root
+     * Overload 2: reset(keys)
+     * Overload 3: reset(element)
+     * Overload 4: reset(element, keys)
      */
-    reset: (keys?: Array<T[K2][number]>) => void;
+    reset(...args: [any, any?]): void;
 
     /**
      * Overload 1: value(keys) -> read from root
@@ -94,6 +96,12 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             props = args[0];
           }
 
+          // Ensure registry for this classKey
+          if (!registry[arg1]) {
+            registry[arg1] = new Map<HTMLElement, Set<string>>();
+          }
+          const mapForClass = registry[arg1];
+
           const keys = Object.keys(props) as Array<keyof typeof props>;
           for (const abbr of keys) {
             let val = props[abbr];
@@ -110,19 +118,23 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             // Schedule a set action and override any previous action for the same var.
             pushSetAction(finalVarName, val, targetEl);
 
-            // Track the final variable name in the registry.
-            if (!registry[arg1]) {
-              registry[arg1] = new Set<string>();
+            // Track the final variable name in the registry under this element
+            if (!mapForClass.has(targetEl)) {
+              mapForClass.set(targetEl, new Set<string>());
             }
-            registry[arg1].add(finalVarName);
+            mapForClass.get(targetEl)!.add(finalVarName);
           }
         },
 
         /**
-         * reset(keys?) removes the specified properties if keys are provided.
-         * If no keys are provided, remove all properties previously set for this classKey.
+         * reset(...args) removes varNames previously set for this classKey.
+         * Overload:
+         *   reset()
+         *   reset(keys)
+         *   reset(element)
+         *   reset(element, keys)
          */
-        reset(keys?: Array<T[keyof T][number]>) {
+        reset(...args: [any, any?]) {
           if (scope === 'none') {
             return;
           }
@@ -130,23 +142,48 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
             return;
           }
 
-          // If no keys are provided, remove all properties for this classKey.
-          if (!keys) {
-            for (const varName of registry[arg1]) {
-              pushRemoveAction(varName);
-            }
-            registry[arg1].clear();
+          let targetEl: HTMLElement;
+          let keys: Array<T[keyof T][number]> | undefined;
+
+          // Case: reset(element, keys)
+          if (args.length === 2 && args[0] instanceof HTMLElement) {
+            targetEl = args[0];
+            keys = args[1];
+          }
+          // Case: reset(element)
+          else if (args.length === 1 && args[0] instanceof HTMLElement) {
+            targetEl = args[0];
+            keys = undefined;
+          }
+          // Case: reset(keys?) or reset()
+          else {
+            targetEl = document.documentElement;
+            keys = args[0];
+          }
+
+          const mapForClass = registry[arg1];
+          if (!mapForClass.has(targetEl)) {
             return;
           }
 
-          // Otherwise, remove only the specified keys.
+          const setOfVar = mapForClass.get(targetEl)!;
+
+          // If no keys are provided, remove all properties for this element
+          if (!keys) {
+            for (const varName of setOfVar) {
+              pushRemoveAction(varName, targetEl);
+            }
+            setOfVar.clear();
+            return;
+          }
+
+          // Otherwise, remove only the specified keys
           for (const abbr of keys) {
             const { baseVarName, suffix } = parseVariableAbbr(abbr);
             const finalVarName = buildVariableName(baseVarName, scope, cls, suffix);
-
-            if (registry[arg1].has(finalVarName)) {
-              pushRemoveAction(finalVarName);
-              registry[arg1].delete(finalVarName);
+            if (setOfVar.has(finalVarName)) {
+              pushRemoveAction(finalVarName, targetEl);
+              setOfVar.delete(finalVarName);
             }
           }
         },
@@ -206,15 +243,19 @@ export function attachGetMethod<T extends Record<string, string[]>>(resultObj: C
   }
 
   /**
-   * resetAll() removes all properties stored in the registry for every classKey.
+   * resetAll() removes all properties stored in the registry for every classKey
+   * and every element that was tracked.
    */
   function resetAll() {
     for (const classKey in registry) {
-      const setOfVar = registry[classKey];
-      for (const varName of setOfVar) {
-        pushRemoveAction(varName);
+      const mapForClass = registry[classKey];
+      for (const [el, setOfVar] of mapForClass.entries()) {
+        for (const varName of setOfVar) {
+          pushRemoveAction(varName, el);
+        }
+        setOfVar.clear();
       }
-      setOfVar.clear();
+      mapForClass.clear();
     }
   }
 
