@@ -2,8 +2,10 @@
 
 /**
  * Parses CSS-like text to identify class blocks of the form `.className { ... }`.
- * This function uses a non-greedy regex approach, ignoring nested braces. It returns
- * an array of objects containing the class name and the raw content of the block.
+ * The previous implementation relied on a non-greedy regular expression which
+ * failed whenever nested braces were present inside a block (e.g. `@media` or
+ * nested selectors). This version performs a simple brace counting routine so
+ * that nested braces are handled correctly.
  */
 export function parseClassBlocksWithBraceCounting(
   text: string
@@ -12,19 +14,30 @@ export function parseClassBlocksWithBraceCounting(
   body: string;
 }> {
   const result: Array<{ className: string; body: string }> = [];
-  const pattern = /\.([\w-]+)\s*\{[\s\S]*?\}/g;
+  const pattern = /\.([\w-]+)\s*\{/g;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(text)) !== null) {
     const clsName = match[1];
-    const block = match[0];
-    const openCurlyPos = block.indexOf('{');
-    const closeCurlyPos = block.lastIndexOf('}');
-    let body = '';
-    if (openCurlyPos !== -1 && closeCurlyPos !== -1 && closeCurlyPos > openCurlyPos) {
-      body = block.slice(openCurlyPos + 1, closeCurlyPos).trim();
+    let idx = pattern.lastIndex;
+    let braceCount = 1;
+
+    while (idx < text.length && braceCount > 0) {
+      const ch = text[idx];
+      if (ch === '{') {
+        braceCount++;
+      } else if (ch === '}') {
+        braceCount--;
+      }
+      idx++;
     }
+
+    const endIdx = idx - 1;
+    const body = text.slice(pattern.lastIndex, endIdx).trim();
     result.push({ className: clsName, body });
+
+    // Continue searching from the end of this block
+    pattern.lastIndex = idx;
   }
 
   return result;
