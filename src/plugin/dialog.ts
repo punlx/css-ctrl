@@ -233,7 +233,8 @@ export function dialog(options: DialogPluginOptions) {
     if (!storage.dialog.dialogItems.dialog) return;
     const dialogEl = storage.dialog.dialogItems.dialog;
 
-    document.body.style.overflow = storage.dialog.dialogItems.previousBodyOverflow || '';
+    // ตรงนี้ ให้เอา document.body.style.overflow กลับออกก่อน
+    // document.body.style.overflow = storage.dialog.dialogItems.previousBodyOverflow || '';
 
     if (closeMode === 'outside-close') {
       dialogEl.removeEventListener('click', onOverlayClick);
@@ -248,6 +249,9 @@ export function dialog(options: DialogPluginOptions) {
       dialogEl.addEventListener(
         'animationend',
         () => {
+          // เมื่อ animation fadeout จบ ค่อยคืนค่า scroll ของ body
+          document.body.style.overflow = storage.dialog.dialogItems.previousBodyOverflow || '';
+
           dialogEl.classList.remove('dialogPluginFadeOutClass');
           storage.dialog.dialogItems.state = { open: false };
           callEvent('closed');
@@ -269,7 +273,6 @@ export function dialog(options: DialogPluginOptions) {
       );
     });
   }
-
   function close() {
     closeDialog();
   }
